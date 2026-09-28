@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Budget">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Budget Famille</title>
+<style>
+:root{--ok:#15803d;--bg:#f4f5f7;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#0f766e;--accent-2:#ccfbf1;--danger:#dc2626;--warn:#d97706;--r:16px}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0f14;--card:#151b23;--text:#e5e7eb;--muted:#9ca3af;--line:#263041;--accent:#14b8a6;--accent-2:#134e4a;--ok:#4ade80}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+body{padding:env(safe-area-inset-top) 0 calc(100px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 10px;display:flex;align-items:center;gap:8px;max-width:560px;margin:0 auto}
+header h1{flex:1;font-size:18px;margin:0;text-align:center}
+.cap::first-letter{text-transform:uppercase}
+.icon-btn{border:0;background:var(--card);color:var(--text);min-width:40px;height:40px;border-radius:12px;font-size:18px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer}
+main{padding:0 16px;max-width:560px;margin:0 auto}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:22px 4px 8px}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.summary{display:flex;gap:18px;align-items:center}
+.ring{width:108px;height:108px;flex:none}
+.big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted);font-size:14px}
+.num{font-variant-numeric:tabular-nums}
+.bud{cursor:pointer}
+.bud-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.emoji{font-size:22px;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none}
+.bud-name{flex:1;font-weight:600;min-width:0}
+.bud-amt{text-align:right}
+.bar{position:relative;height:14px;border-radius:99px;background:var(--line)}
+.fill{height:100%;border-radius:99px;transition:width .6s ease;max-width:100%}
+.pace{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--text);opacity:.5;border-radius:2px}
+.bud-foot{display:flex;justify-content:space-between;margin-top:8px;gap:8px}
+.over .left{color:var(--danger);font-weight:600}
+.warn .left{color:var(--warn);font-weight:600}
+.fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom));width:62px;height:62px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:32px;line-height:1;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:6;cursor:pointer}
+.row{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.row:last-child{border-bottom:0}
+.row .grow{flex:1;min-width:0}
+.row .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{text-align:center;color:var(--muted);padding:24px 8px}
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));animation:up .22s ease}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.sheet h3{margin:0 0 14px;font-size:19px;display:flex;justify-content:space-between;align-items:center}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 2px 4px}
+input,select{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;appearance:none;-webkit-appearance:none}
+input[type=color]{height:46px;padding:4px}
+input:focus,select:focus{outline:2px solid var(--accent);border-color:transparent}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:600;cursor:pointer;margin-top:14px;background:var(--line);color:var(--text)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.soft{background:var(--accent-2);color:var(--text)}
+.btn.danger{background:transparent;color:var(--danger)}
+.scanrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.scanrow .btn{margin-top:0;padding:18px 8px}
+.or{text-align:center;color:var(--muted);font-size:13px;margin:16px 0 0}
+.tx{border:1px solid var(--line);border-radius:14px;padding:4px 12px 12px;margin-bottom:10px}
+.tx.off{opacity:.45}
+.tx-head{display:flex;align-items:center;gap:10px;padding-top:10px}
+.tx-head input[type=checkbox]{width:22px;height:22px;flex:none;appearance:auto;-webkit-appearance:checkbox}
+.loading{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-weight:600}
+.spin{width:44px;height:44px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:12px;z-index:50;font-size:14px;max-width:90vw;text-align:center}
+.hint{font-size:13px;color:var(--muted);margin:8px 2px 0}
+.rv{padding:12px 0;border-bottom:1px solid var(--line)}
+.rv:first-child{padding-top:0}
+.rv-top{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.rv .grow{flex:1;min-width:0}
+.rv .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:99px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
+.chip.on{background:var(--accent);color:#fff;border-color:transparent}
+.bar .fill.up{position:absolute;top:0;opacity:.3;border-radius:0 99px 99px 0}
+.up-line{margin-top:6px;font-size:13px}
+label.check{display:flex;align-items:center;gap:10px;color:var(--text);font-size:15px;margin-top:16px}
+label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appearance:checkbox;padding:0}
+.acct{cursor:pointer}
+.acct-flow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.acct-flow div{display:flex;flex-direction:column;gap:2px}
+.acct-flow .muted{font-size:12px}
+.alert{border:1px solid var(--warn)}
+.alert .btn{margin-top:10px}
+.thumb{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<button class="fab" id="fab" data-a="fab" aria-label="Ajouter une dépense">+</button>
+<input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileIn" accept="image/*" hidden>
+<input type="file" id="importIn" accept="application/json,.json" hidden>
+<div id="layer"></div>
+
+<script>
+'use strict';
+/* ---------- utilitaires ---------- */
+const $ = s => document.querySelector(s);
+const STORE = 'budget-famille-v1';
+const MODELS = [
+  ['claude-haiku-4-5-20251001', 'Claude Haiku 4.5 — rapide et économique'],
+  ['claude-sonnet-5', 'Claude Sonnet 5 — plus précis, plus cher']
+];
+const eur = n => new Intl.NumberFormat('fr-BE', {style:'currency', currency:'EUR'}).format(n || 0);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const localISO = (d = new Date()) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Lit un montant quel que soit le format : "12,34", "12,34 €", "€1.234,50", "1,234.50", 12.34
+const num = v => {
+  if (typeof v === 'number') return isFinite(v) ? Math.round(Math.abs(v) * 100) / 100 : NaN;
+  let s = String(v ?? '').replace(/[^\d,.]/g, '');
+  const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+  if (lc > -1 && ld > -1) s = lc > ld ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (lc > -1) s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+};
+// Clé de comparaison d'un commerçant : "COLRUYT KRAAINEM 1234" → "colruyt kraainem"
+const normMerchant = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z ]/g, ' ').split(/\s+/).filter(w => w.length > 1).slice(0, 2).join(' ');
+const monthLabel = m => { const [y, mo] = m.split('-').map(Number); return new Date(y, mo - 1, 1).toLocaleDateString('fr-BE', {month:'long', year:'numeric'}); };
+const shortDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-BE', {day:'numeric', month:'short'}) : '';
+
+/* ---------- données ---------- */
+function defaults() {
+  return {
+    budgets: [
+      {id: uid(), name: 'Courses alimentaires', emoji: '🛒', amount: 600, color: '#16a34a'},
+      {id: uid(), name: 'Sorties', emoji: '🍽️', amount: 200, color: '#2563eb'},
+      {id: uid(), name: 'Dépenses fixes', emoji: '🏠', amount: 1500, color: '#9333ea'}
+    ],
+    expenses: [],
+    recurring: [],
+    bank: {since: null, seen: [], status: {}, pending: null},
+    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25}
+  };
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE));
+    if (s && Array.isArray(s.budgets)) {
+      s.settings = {...defaults().settings, ...(s.settings || {})};
+      s.recurring = Array.isArray(s.recurring) ? s.recurring : [];
+      s.bank = {since: null, seen: [], status: {}, pending: null, ...(s.bank || {})};
+      return s;
+    }
+  } catch (e) {}
+  return defaults();
+}
+let ver = 0; // version des données : invalide les caches de périodes
+function save() { ver++; localStorage.setItem(STORE, JSON.stringify(state)); }
+
+let state = load();
+let pym = null; // mois de début de la période affichée (ex. "2026-09" = période qui commence au salaire de septembre)
+let view = {name: 'home'};
+let pending = [];   // transactions lues par le scan, en attente de validation
+let pendingImg = '';
+
+const budgetById = id => state.budgets.find(b => b.id === id);
+const inPeriod = d => { const P = per(); return d >= P.start && d < P.end; };
+const monthExpenses = bid => state.expenses.filter(e => inPeriod(e.date) && (!bid || e.budgetId === bid));
+const spent = bid => monthExpenses(bid).reduce((s, e) => s + e.amount, 0);
+// Budget déjà utilisé pour ce commerçant (dernière dépense confirmée)
+const keyOf = e => e.key || normMerchant(e.merchant);
+const firstWord = s => normMerchant(s).split(' ')[0] || '';
+const daysBetween = (a, b) => Math.abs((new Date(a + 'T12:00') - new Date(b + 'T12:00')) / 864e5);
+// Dernier classement confirmé pour ce commerçant : {budgetId} ou {income: true}
+function guessTarget(key, credit = false) {
+  if (!key) return null;
+  for (let i = state.expenses.length - 1; i >= 0; i--) {
+    const e = state.expenses[i];
+    if (e.review || keyOf(e) !== key) continue;
+    if (credit) {
+      if (e.income) return {income: true};
+      if (e.amount < 0 && budgetById(e.budgetId)) return {budgetId: e.budgetId};
+    } else if (!e.income && e.amount > 0 && budgetById(e.budgetId)) return {budgetId: e.budgetId};
+  }
+  return null;
+}
+const guessBudget = merchant => guessTarget(normMerchant(merchant))?.budgetId || null;
+/* ---------- périodes budgétaires : mois civil ou de salaire à salaire ---------- */
+const addDays = (d, n) => localISO(new Date(new Date(d + 'T12:00').getTime() + n * 864e5));
+const ymAdd = (ym, n) => { const [y, m] = ym.split('-').map(Number); return localISO(new Date(y, m - 1 + n, 15)).slice(0, 7); };
+const salaryMode = () => state.settings.period === 'salary';
+const isSalary = (key, day) => { const k = firstWord(state.settings.salaryPayer); return !!k && firstWord(key) === k && (day >= 18 || day <= 5); };
+// Date du salaire pour chaque « mois de période » (un salaire tardif, début du mois suivant, compte pour le mois précédent)
+let salCache = {};
+function salaryMap() {
+  const ck = ver + '|' + localISO() + '|' + state.settings.salaryPayer;
+  if (salCache.k === ck) return salCache.v;
+  const map = {};
+  for (const e of state.expenses) {
+    if (!e.income || e.amount <= 0) continue;
+    const day = +e.date.slice(8, 10);
+    if (!isSalary(keyOf(e), day)) continue;
+    const ym = day <= 5 ? ymAdd(e.date.slice(0, 7), -1) : e.date.slice(0, 7);
+    if (!map[ym] || e.date < map[ym]) map[ym] = e.date;
+  }
+  salCache = {k: ck, v: map};
+  return map;
+}
+// Premier jour de la période qui commence avec le salaire du mois ym
+function boundary(ym, sal = salaryMap()) {
+  if (!salaryMode()) return `${ym}-01`;
+  if (sal[ym]) return sal[ym];
+  const anchor = `${ym}-${String(Math.min(state.settings.salaryDay || 25, daysIn(ym))).padStart(2, '0')}`;
+  const today = localISO();
+  // salaire attendu mais pas encore arrivé : la période en cours continue jusqu'à son arrivée
+  if (Object.keys(sal).length && today >= anchor && today <= `${ymAdd(ym, 1)}-05`) return addDays(today, 1);
+  return anchor;
+}
+function periodOf(ym) { const sal = salaryMap(); return {ym, start: boundary(ym, sal), end: boundary(ymAdd(ym, 1), sal)}; }
+function periodAt(date) {
+  const sal = salaryMap();
+  let ym = date.slice(0, 7);
+  if (date < boundary(ym, sal)) ym = ymAdd(ym, -1);
+  return {ym, start: boundary(ym, sal), end: boundary(ymAdd(ym, 1), sal)};
+}
+const curYm = () => periodAt(localISO()).ym;
+let followCurrent = true;
+let perCache = {};
+function per() {
+  const ck = [ver, localISO(), followCurrent ? '' : pym, state.settings.period, state.settings.salaryDay].join('|');
+  if (perCache.k === ck) return perCache.v;
+  if (followCurrent || !pym) pym = curYm();
+  perCache = {k: ck, v: periodOf(pym)};
+  return perCache.v;
+}
+const isCurrent = () => per().ym === curYm();
+function periodLabel() {
+  const P = per();
+  if (!salaryMode()) return monthLabel(P.ym);
+  const f = d => new Date(d + 'T12:00').toLocaleDateString('fr-BE', {day: 'numeric', month: 'short'});
+  return isCurrent() ? `Depuis le ${f(P.start)}` : `${f(P.start)} → ${f(addDays(P.end, -1))}`;
+}
+const periodWord = () => salaryMode() ? (isCurrent() ? 'depuis le salaire' : 'sur la période') : 'ce mois';
+
+/* ---------- dépenses récurrentes ---------- */
+const daysIn = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); };
+const nextMonth = ym => { const [y, m] = ym.split('-').map(Number); return localISO(new Date(y, m, 15)).slice(0, 7); };
+const dueDate = (r, ym) => `${ym}-${String(Math.min(r.day, daysIn(ym))).padStart(2, '0')}`;
+
+// Inscrit chaque dépense récurrente arrivée à échéance (une seule fois par mois, même si elle est supprimée ensuite)
+function applyRecurring() {
+  const today = localISO(), cur = today.slice(0, 7);
+  let n = 0;
+  for (const r of state.recurring) {
+    if (!r.active || !budgetById(r.budgetId)) continue;
+    r.done = r.done || [];
+    for (let ym = r.start; ym <= cur; ym = nextMonth(ym)) {
+      if (r.done.includes(ym)) continue;
+      const date = dueDate(r, ym);
+      if (date > today) break;
+      state.expenses.push({id: uid(), created: Date.now(), source: 'recurrent', recId: r.id, amount: r.amount,
+        date, budgetId: r.budgetId, merchant: r.name, note: '', review: false});
+      r.done.push(ym); n++;
+    }
+    r.done = r.done.slice(-24);
+  }
+  if (n) save();
+  return n;
+}
+// Montant encore à prélever d'ici la fin de la période en cours pour un budget
+function upcoming(bid) {
+  if (!isCurrent()) return 0;
+  const today = localISO(), P = per();
+  const yms = [...new Set([P.start.slice(0, 7), addDays(P.end, -1).slice(0, 7)])];
+  let sum = 0;
+  for (const r of state.recurring) {
+    if (!r.active || r.budgetId !== bid) continue;
+    for (const ym of yms) {
+      const d = dueDate(r, ym);
+      if (r.start <= ym && !(r.done || []).includes(ym) && d > today && d >= P.start && d < P.end) sum += r.amount;
+    }
+  }
+  return sum;
+}
+
+function pace() {
+  if (!isCurrent()) return null;
+  const P = per(), total = daysBetween(P.start, P.end);
+  return total > 0 ? Math.min(1, (daysBetween(P.start, localISO()) + 1) / total) : null;
+}
+
+/* ---------- rendu ---------- */
+function budgetCard(b, clickable = true) {
+  const sp = spent(b.id), pct = b.amount > 0 ? sp / b.amount : 0, p = pace();
+  const left = b.amount - sp, up = upcoming(b.id);
+  const status = pct >= 1 ? 'over' : (p !== null && pct > p + 0.1 ? 'warn' : '');
+  const color = pct >= 1 ? 'var(--danger)' : b.color;
+  return `<div class="card bud ${status}" ${clickable ? `data-a="open-budget" data-id="${b.id}"` : ''}>
+    <div class="bud-top">
+      <div class="emoji" style="background:${b.color}22">${esc(b.emoji)}</div>
+      <div class="bud-name">${esc(b.name)}</div>
+      <div class="bud-amt"><div class="num"><b>${eur(sp)}</b></div><div class="muted num">sur ${eur(b.amount)}</div></div>
+    </div>
+    <div class="bar"><div class="fill" style="width:${Math.min(pct, 1) * 100}%;background:${color}"></div>
+      ${up > 0 && pct < 1 ? `<div class="fill up" style="left:${pct * 100}%;width:${Math.min(up / b.amount, 1 - pct) * 100}%;background:${b.color}"></div>` : ''}
+      ${p !== null ? `<div class="pace" style="left:${p * 100}%" title="Rythme du mois"></div>` : ''}</div>
+    <div class="bud-foot muted">
+      <span class="left num">${left >= 0 ? `Reste ${eur(left)}` : `Dépassement de ${eur(-left)}`}</span>
+      <span class="num">${Math.round(pct * 100)} %</span>
+    </div>
+    ${up > 0 ? `<div class="muted up-line num">🔁 ${eur(up)} encore à prélever ${salaryMode() ? 'd\'ici le prochain salaire' : 'ce mois'}${left - up < 0 ? ` · <b style="color:var(--danger)">dépassement prévu de ${eur(up - left)}</b>` : ` · reste réel ${eur(left - up)}`}</div>` : ''}
+  </div>`;
+}
+
+function monthNav(left) {
+  return `<header>${left}
+    <button class="icon-btn" data-a="prev" aria-label="Mois précédent">‹</button>
+    <h1 class="cap">${periodLabel()}</h1>
+    <button class="icon-btn" data-a="next" aria-label="Mois suivant">›</button>
+    ${view.name === 'home' ? '<button class="icon-btn" data-a="settings" aria-label="Réglages">⚙️</button>' : '<span style="width:40px"></span>'}
+  </header>`;
+}
+
+function reviewHTML() {
+  const list = state.expenses.filter(e => e.review).sort((x, y) => y.date.localeCompare(x.date));
+  if (!list.length) return '';
+  const src = {'apple-pay': 'Apple Pay', banque: 'Compte bancaire'};
+  return `<h2>À vérifier (${list.length})</h2><div class="card">${list.map(e => `
+    <div class="rv">
+      <div class="rv-top"><div class="grow"><div class="t">${esc(e.merchant || 'Mouvement')}</div>
+        <div class="muted">${shortDate(e.date)} · ${src[e.source] || 'Import'}${e.note ? ' · ' + esc(e.note) : ''}</div></div>
+        <b class="num" ${e.credit ? 'style="color:var(--ok)"' : ''}>${e.credit ? '+' : ''}${eur(Math.abs(e.amount))}</b></div>
+      <div class="chips">${e.credit ? `<button class="chip ${e.income ? 'on' : ''}" data-a="assign" data-id="${e.id}" data-b="__income">💶 Revenu</button>` : ''}
+        ${state.budgets.map(b => `<button class="chip ${!e.income && b.id === e.budgetId ? 'on' : ''}" data-a="assign" data-id="${e.id}" data-b="${b.id}">${esc(b.emoji)} ${esc(b.name)}${e.credit ? ' ↩︎' : ''}</button>`).join('')}
+        <button class="chip" data-a="del-rv" data-id="${e.id}" aria-label="Ignorer">🗑️ Ignorer</button></div>
+    </div>`).join('')}
+    <p class="hint">Touche le bon choix pour confirmer ; ce commerçant sera ensuite classé tout seul. ↩︎ = remboursement déduit du budget. « Ignorer » pour les transferts vers ton épargne.</p></div>`;
+}
+
+function bankHTML() {
+  const st = state.bank.status || {};
+  if (!state.bank.since && !st.state) return '';
+  const inc = state.expenses.filter(e => e.income && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
+  const out = state.expenses.filter(e => !e.income && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
+  const bal = (st.balances || []).reduce((a, b) => a + b.amount, 0);
+  const daysLeft = st.valid_until ? Math.floor((new Date(st.valid_until) - Date.now()) / 864e5) : null;
+  const alert = st.state === 'expired' ? 'L\'accès à ton compte a expiré.'
+    : st.state === 'error' ? 'Synchronisation bancaire en erreur : ' + esc(st.message || '')
+    : daysLeft !== null && daysLeft < 14 ? `L'accès à ton compte expire dans ${Math.max(daysLeft, 0)} jour${daysLeft > 1 ? 's' : ''}.` : '';
+  return `${alert ? `<div class="card alert">⚠️ ${alert}<button class="btn primary" data-a="bank-connect">🏦 Renouveler l'accès bancaire</button></div>` : ''}
+    <div class="card acct" data-a="open-income">
+      <div><div class="muted">Solde du compte</div><div class="big">${st.balances?.length ? eur(bal) : '—'}</div>
+        <div class="muted">${st.last_sync ? 'mis à jour ' + new Date(st.last_sync).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : 'en attente de synchronisation'}</div></div>
+      <div class="acct-flow num"><div><span class="muted">Entrées</span><b style="color:var(--ok)">+${eur(inc)}</b></div>
+        <div><span class="muted">Dépenses</span><b>−${eur(out)}</b></div>
+        <div><span class="muted">Solde ${salaryMode() ? 'période' : 'du mois'}</span><b style="color:${inc - out >= 0 ? 'var(--ok)' : 'var(--danger)'}">${inc - out >= 0 ? '+' : '−'}${eur(Math.abs(inc - out))}</b></div></div>
+    </div>`;
+}
+
+function incomeHTML() {
+  const list = state.expenses.filter(e => e.income && inPeriod(e.date)).sort((x, y) => y.date.localeCompare(x.date));
+  return monthNav('<button class="icon-btn" data-a="back" aria-label="Retour">←</button>') + `<main>
+    <h2>Entrées ${salaryMode() ? 'de la période' : 'du mois'} · ${eur(list.reduce((a, e) => a + e.amount, 0))}</h2>
+    <div class="card">${list.length ? list.map(e => `
+      <div class="row" data-a="open-exp" data-id="${e.id}">
+        <div class="grow"><div class="t">${esc(e.merchant || 'Entrée')}</div><div class="muted">${shortDate(e.date)}${e.note ? ' · ' + esc(e.note) : ''}</div></div>
+        <b class="num" style="color:var(--ok)">+${eur(e.amount)}</b></div>`).join('') : '<div class="empty">Aucune entrée sur cette période.</div>'}
+    </div></main>`;
+}
+
+function homeHTML() {
+  const tot = state.budgets.reduce((s, b) => s + b.amount, 0);
+  const sp = state.budgets.reduce((s, b) => s + spent(b.id), 0);
+  const pct = tot > 0 ? sp / tot : 0, C = 2 * Math.PI * 46;
+  const color = pct >= 1 ? 'var(--danger)' : 'var(--accent)';
+  const inbox = state.settings.ghRepo && state.settings.ghToken;
+  return monthNav(inbox ? '<button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button>' : '<span style="width:40px"></span>') + `<main>
+    <div class="card summary">
+      <svg class="ring" viewBox="0 0 108 108">
+        <circle cx="54" cy="54" r="46" fill="none" stroke="var(--line)" stroke-width="12"/>
+        <circle cx="54" cy="54" r="46" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
+          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - Math.min(pct, 1))}" transform="rotate(-90 54 54)" style="transition:stroke-dashoffset .6s"/>
+        <text x="54" y="60" text-anchor="middle" font-size="20" font-weight="700" fill="currentColor">${Math.round(pct * 100)}%</text>
+      </svg>
+      <div>
+        <div class="muted">Dépensé ${periodWord()}</div>
+        <div class="big">${eur(sp)}</div>
+        <div class="muted num">sur ${eur(tot)} · ${tot - sp >= 0 ? 'reste ' + eur(tot - sp) : 'dépassé de ' + eur(sp - tot)}</div>
+      </div>
+    </div>
+    ${bankHTML()}
+    ${reviewHTML()}
+    <h2>Budgets</h2>
+    ${state.budgets.map(b => budgetCard(b)).join('') || '<div class="empty">Aucun budget. Crée-en un dans les réglages ⚙️</div>'}
+  </main>`;
+}
+
+function budgetHTML(id) {
+  const b = budgetById(id);
+  if (!b) { view = {name: 'home'}; return homeHTML(); }
+  const list = monthExpenses(id).sort((x, y) => y.date.localeCompare(x.date) || y.created - x.created);
+  return monthNav('<button class="icon-btn" data-a="back" aria-label="Retour">←</button>') + `<main>
+    ${budgetCard(b, false)}
+    <h2>${list.length} dépense${list.length > 1 ? 's' : ''}</h2>
+    <div class="card">${list.length ? list.map(e => `
+      <div class="row" data-a="open-exp" data-id="${e.id}">
+        <div class="grow"><div class="t">${esc(e.merchant || 'Dépense')}</div>
+          <div class="muted">${shortDate(e.date)}${e.note ? ' · ' + esc(e.note) : ''}${e.source === 'scan' ? ' · 📷' : e.source === 'apple-pay' ? ' · ' : e.source === 'recurrent' || e.recId ? ' · 🔁' : e.source === 'banque' ? ' · 🏦' : ''}${e.review ? ' · à vérifier' : ''}</div></div>
+        <div class="num"><b>${eur(e.amount)}</b></div>
+      </div>`).join('') : '<div class="empty">Rien sur cette période.</div>'}
+    </div>
+  </main>`;
+}
+
+function settingsHTML() {
+  const s = state.settings;
+  return `<header><button class="icon-btn" data-a="back" aria-label="Retour">←</button><h1>Réglages</h1><span style="width:40px"></span></header>
+  <main>
+    <h2>Budgets mensuels</h2>
+    <div class="card">
+      ${state.budgets.map(b => `<div class="row" data-a="edit-budget" data-id="${b.id}">
+        <div class="emoji" style="background:${b.color}22">${esc(b.emoji)}</div>
+        <div class="grow t">${esc(b.name)}</div><div class="num">${eur(b.amount)}</div></div>`).join('')}
+      <button class="btn soft" data-a="add-budget">+ Nouveau budget</button>
+    </div>
+
+    <form id="settingsForm">
+      <h2>Période budgétaire</h2>
+      <div class="card">
+        <label for="pm">Les budgets repartent à zéro</label>
+        <select id="pm" name="period">
+          <option value="salary" ${s.period === 'salary' ? 'selected' : ''}>à chaque salaire reçu</option>
+          <option value="calendar" ${s.period !== 'salary' ? 'selected' : ''}>le 1er de chaque mois</option></select>
+        <div class="grid2">
+          <div><label for="sp">Salaire versé par</label><input id="sp" name="salaryPayer" value="${esc(s.salaryPayer)}" placeholder="Stellantis"></div>
+          <div><label for="sd">Jour habituel</label><input id="sd" name="salaryDay" type="number" min="1" max="31" value="${s.salaryDay || 25}"></div>
+        </div>
+        <p class="hint">La période commence le jour où le salaire arrive sur le compte. Tant qu'il n'est pas arrivé, la période en cours continue. Sans compte bancaire relié, elle démarre au jour habituel.</p>
+      </div>
+
+      <h2>Lecture des tickets</h2>
+      <div class="card">
+        <label for="k">Clé API Anthropic</label>
+        <input id="k" name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…" value="${esc(s.apiKey)}">
+        <label for="m">Modèle</label>
+        <select id="m" name="model">${MODELS.map(([v, l]) => `<option value="${v}" ${v === s.model ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <p class="hint">Sert aussi à classer les nouveaux commerçants Apple Pay. La clé reste sur ce téléphone ; fixe une limite de dépense sur console.anthropic.com.</p>
+      </div>
+
+      <h2>Paiements Apple Pay automatiques</h2>
+      <div class="card">
+        <label for="gr">Dépôt GitHub de réception</label>
+        <input id="gr" name="ghRepo" autocomplete="off" autocapitalize="off" placeholder="pseudo/budget-inbox" value="${esc(s.ghRepo)}">
+        <label for="gt">Jeton GitHub (accès Issues)</label>
+        <input id="gt" name="ghToken" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(s.ghToken)}">
+        <p class="hint">Le raccourci iOS dépose chaque paiement dans ce dépôt privé ; l'app les récupère à chaque ouverture. Mise en place : voir le README.</p>
+        ${s.ghRepo && s.ghToken ? '<button type="button" class="btn soft" data-a="sync">🔄 Récupérer les paiements maintenant</button>' : ''}
+      </div>
+      <button class="btn primary">Enregistrer les réglages</button>
+    </form>
+
+    <h2>Compte bancaire — tous les mouvements</h2>
+    <div class="card">
+      ${!(s.ghRepo && s.ghToken) ? '<p class="hint" style="margin-top:0">Renseigne d\'abord le dépôt et le jeton GitHub ci-dessus (section Apple Pay), puis installe le robot bancaire (README).</p>' : `
+        <p style="margin:0">${bankStatusText()}</p>
+        <button class="btn primary" data-a="bank-connect">🏦 ${state.bank.status?.valid_until ? 'Renouveler l\'accès' : 'Connecter mon compte BNP'}</button>
+        <label for="bc">Code de retour de la banque</label>
+        <div class="grid2" style="grid-template-columns:1fr auto"><input id="bc" autocomplete="off" autocapitalize="off" placeholder="colle le code ici">
+          <button class="btn soft" style="margin:0;width:auto" data-a="bank-paste">Coller</button></div>
+        <button class="btn soft" data-a="bank-code">Envoyer le code</button>
+        <p class="hint">À n'utiliser que si, après la connexion à ta banque, une page t'a affiché un code à recopier.${state.bank.since ? ` Mouvements importés à partir du ${new Date(state.bank.since + 'T12:00').toLocaleDateString('fr-BE')}.` : ''}</p>`}
+    </div>
+
+    <h2>Dépenses récurrentes</h2>
+    <div class="card">
+      ${state.recurring.length ? state.recurring.map(r => { const b = budgetById(r.budgetId); return `<div class="row" data-a="edit-rec" data-id="${r.id}">
+        <div class="emoji" style="background:${b ? b.color : '#888'}22">${b ? esc(b.emoji) : '❔'}</div>
+        <div class="grow"><div class="t">${esc(r.name)}</div><div class="muted">le ${r.day} de chaque mois${r.active ? '' : ' · en pause'}</div></div>
+        <div class="num">${eur(r.amount)}</div></div>`; }).join('') : '<p class="hint" style="margin-top:0">Loyer, prêt, énergie, assurances, abonnements… Elles s\'inscrivent seules le jour du prélèvement.</p>'}
+      <button class="btn soft" data-a="add-rec">+ Nouvelle dépense récurrente</button>
+    </div>
+
+    <h2>Données</h2>
+    <div class="card">
+      <p class="hint" style="margin-top:0">Tes données sont stockées sur ce téléphone uniquement. Exporte une sauvegarde de temps en temps.</p>
+      <button class="btn soft" data-a="export">⬇️ Exporter une sauvegarde</button>
+      <button class="btn" data-a="import">⬆️ Restaurer une sauvegarde</button>
+      <button class="btn danger" data-a="reset">Tout effacer</button>
+    </div>
+  </main>`;
+}
+
+function render() {
+  const app = $('#app');
+  if (view.name === 'budget') app.innerHTML = budgetHTML(view.id);
+  else if (view.name === 'income') app.innerHTML = incomeHTML();
+  else if (view.name === 'settings') app.innerHTML = settingsHTML();
+  else app.innerHTML = homeHTML();
+  $('#fab').hidden = view.name === 'settings';
+}
+
+/* ---------- feuilles (modales) ---------- */
+function openSheet(html) {
+  $('#layer').innerHTML = `<div class="backdrop" data-a="backdrop"><div class="sheet">${html}</div></div>`;
+}
+function closeSheet() { $('#layer').innerHTML = ''; }
+const budgetOptions = sel => state.budgets.map(b => `<option value="${b.id}" ${b.id === sel ? 'selected' : ''}>${esc(b.emoji)} ${esc(b.name)}</option>`).join('');
+
+function openExpense(e) {
+  const isNew = !e.id;
+  openSheet(`<h3>${isNew ? 'Nouvelle dépense' : 'Modifier la dépense'}<button class="icon-btn" data-a="close">✕</button></h3>
+    ${isNew ? `<div class="scanrow">
+        <button class="btn soft" data-a="scan-cam">📷<br>Photo du ticket</button>
+        <button class="btn soft" data-a="scan-file">🖼️<br>Capture bancaire</button>
+      </div><div class="or">ou encoder manuellement</div>` : ''}
+    <form id="expForm" data-id="${e.id || ''}">
+      <div class="grid2">
+        <div><label>Montant (€)${e.credit ? ' reçu' : ''}</label><input name="amount" inputmode="decimal" required placeholder="0,00" value="${e.amount != null ? String(Math.abs(e.amount)).replace('.', ',') : ''}"></div>
+        <div><label>Date</label><input name="date" type="date" required value="${e.date || localISO()}"></div>
+      </div>
+      <label>${e.credit ? 'Classement' : 'Budget'}</label><select name="budgetId">${e.credit ? `<option value="__income" ${e.income ? 'selected' : ''}>💶 Revenu (hors budgets)</option>` : ''}${budgetOptions(e.income ? null : e.budgetId)}</select>
+      <label>${e.credit ? 'Émetteur' : 'Commerçant'}</label><input name="merchant" placeholder="Delhaize, Colruyt…" value="${esc(e.merchant)}">
+      <label>Note</label><input name="note" placeholder="optionnel" value="${esc(e.note)}">
+      ${isNew || !e.recId ? `<label class="check"><input type="checkbox" name="repeat"> 🔁 Répéter chaque mois à cette date</label>` : '<p class="hint">🔁 Dépense récurrente : modifie le modèle dans ⚙️ pour les mois suivants.</p>'}
+      <button class="btn primary">Enregistrer</button>
+      ${isNew ? '' : `<button type="button" class="btn danger" data-a="del-exp" data-id="${e.id}">Supprimer</button>`}
+    </form>`);
+}
+
+function openReview() {
+  openSheet(`<h3>Vérifie avant d'ajouter<button class="icon-btn" data-a="close">✕</button></h3>
+    ${pendingImg ? `<img class="thumb" src="${pendingImg}" alt="">` : ''}
+    <form id="reviewForm">
+      ${pending.map((t, i) => `<div class="tx" id="tx${i}">
+        <div class="tx-head"><input type="checkbox" name="on${i}" checked data-a="tx-toggle" data-i="${i}">
+          <input name="merchant${i}" value="${esc(t.merchant)}" placeholder="Commerçant"></div>
+        <div class="grid2">
+          <div><label>Montant (€)</label><input name="amount${i}" inputmode="decimal" value="${t.amount != null ? String(t.amount).replace('.', ',') : ''}"></div>
+          <div><label>Date</label><input name="date${i}" type="date" value="${t.date || localISO()}"></div>
+        </div>
+        <label>Budget</label><select name="budgetId${i}">${budgetOptions(budgetById(t.budgetId) ? t.budgetId : (view.id || state.budgets[0]?.id))}</select>
+        ${t.note ? `<p class="hint">${esc(t.note)}</p>` : ''}
+      </div>`).join('')}
+      <button class="btn primary">Ajouter ${pending.length > 1 ? 'les dépenses cochées' : 'la dépense'}</button>
+    </form>`);
+}
+
+function openBudget(b) {
+  const isNew = !b.id;
+  openSheet(`<h3>${isNew ? 'Nouveau budget' : 'Modifier le budget'}<button class="icon-btn" data-a="close">✕</button></h3>
+    <form id="budgetForm" data-id="${b.id || ''}">
+      <label>Nom</label><input name="name" required value="${esc(b.name)}" placeholder="Vacances, Enfants…">
+      <div class="grid2">
+        <div><label>Montant mensuel (€)</label><input name="amount" inputmode="decimal" required value="${b.amount != null ? String(b.amount).replace('.', ',') : ''}"></div>
+        <div><label>Emoji</label><input name="emoji" maxlength="4" value="${esc(b.emoji || '💶')}"></div>
+      </div>
+      <label>Couleur</label><input name="color" type="color" value="${b.color || '#0f766e'}">
+      <button class="btn primary">Enregistrer</button>
+      ${isNew ? '' : `<button type="button" class="btn danger" data-a="del-budget" data-id="${b.id}">Supprimer ce budget</button>`}
+    </form>`);
+}
+
+function openRecurring(r) {
+  const isNew = !r.id, cur = localISO().slice(0, 7);
+  openSheet(`<h3>${isNew ? 'Nouvelle dépense récurrente' : 'Dépense récurrente'}<button class="icon-btn" data-a="close">✕</button></h3>
+    <form id="recForm" data-id="${r.id || ''}">
+      <label>Libellé</label><input name="name" required placeholder="Prêt hypothécaire, Luminus, Netflix…" value="${esc(r.name)}">
+      <div class="grid2">
+        <div><label>Montant (€)</label><input name="amount" inputmode="decimal" required value="${r.amount != null ? String(r.amount).replace('.', ',') : ''}"></div>
+        <div><label>Jour du mois</label><input name="day" type="number" min="1" max="31" required value="${r.day || 1}"></div>
+      </div>
+      <label>Budget</label><select name="budgetId">${budgetOptions(r.budgetId || (state.budgets.find(b => /fixe/i.test(b.name)) || state.budgets[0])?.id)}</select>
+      ${isNew ? `<label>Première inscription</label><select name="start">
+          <option value="${cur}">Ce mois-ci (si le jour est passé, elle s'inscrit tout de suite)</option>
+          <option value="${nextMonth(cur)}">À partir du mois prochain</option></select>`
+        : `<label class="check"><input type="checkbox" name="active" ${r.active ? 'checked' : ''}> Active</label>`}
+      <button class="btn primary">Enregistrer</button>
+      ${isNew ? '' : `<button type="button" class="btn danger" data-a="del-rec" data-id="${r.id}">Supprimer (les mois passés restent)</button>`}
+    </form>`);
+}
+
+/* ---------- scan via l'API Claude ---------- */
+function compress(file, max = 1568) {
+  return new Promise((ok, ko) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const r = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); ko(new Error("Image illisible. Essaie une capture d'écran ou une photo JPEG.")); };
+    img.src = url;
+  });
+}
+
+async function analyze(dataUrl) {
+  const {apiKey, model} = state.settings;
+  const list = state.budgets.map(b => `- ${b.id} : ${b.name}`).join('\n');
+  const prompt = `Tu analyses une photo de ticket de caisse ou une capture d'écran de débits bancaires (Belgique, euros).
+Budgets disponibles (id : nom) :
+${list}
+
+Réponds UNIQUEMENT avec un objet JSON, sans texte autour :
+{"transactions":[{"merchant":"...","date":"YYYY-MM-DD","amount":12.34,"budgetId":"...","note":"..."}]}
+
+Règles :
+- Ticket de caisse : UNE seule transaction ; amount = total réellement payé (après remises et bons).
+- Capture bancaire ou relevé : une transaction par débit visible ; ignore les crédits et versements reçus.
+- amount : nombre positif en euros avec un point décimal.
+- date : date de l'achat ; si l'année manque, prends ${new Date().getFullYear()} ; si illisible, null.
+- merchant : nom court et propre du commerçant (ex. "Colruyt", "Delhaize", "Shell").
+- budgetId : l'id du budget le plus adapté dans la liste ci-dessus.
+- note : très courte (ex. "alimentation + droguerie") ou "".
+- Si l'image ne contient aucune dépense : {"transactions":[]}.`;
+  const out = (await callClaude([
+    {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: dataUrl.split(',')[1]}},
+    {type: 'text', text: prompt}
+  ], 2000)).transactions || [];
+  return out.map(t => ({
+    merchant: String(t.merchant || '').slice(0, 60),
+    amount: num(t.amount),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(t.date || '') ? t.date : localISO(),
+    budgetId: budgetById(t.budgetId) ? t.budgetId : guessBudget(t.merchant),
+    note: String(t.note || '').slice(0, 80)
+  })).filter(t => isFinite(t.amount) && t.amount > 0);
+}
+
+// Appel générique à l'API Claude ; renvoie l'objet JSON contenu dans la réponse
+async function callClaude(content, maxTokens = 1000) {
+  const {apiKey, model} = state.settings;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({model, max_tokens: maxTokens, messages: [{role: 'user', content}]})
+  });
+  if (!res.ok) {
+    let msg = res.status === 401 ? 'Clé API invalide.' : res.status === 429 ? 'Trop de requêtes, réessaie dans un instant.' : `Erreur API (${res.status}).`;
+    try { const j = await res.json(); if (j.error?.message) msg += ' ' + j.error.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  const j = await res.json();
+  const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  const m = txt.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error("La réponse n'a pas pu être lue.");
+  return JSON.parse(m[0]);
+}
+
+// Classe des dépenses jamais vues et nettoie leur libellé ; renvoie {libellé: {b: budgetId, n: "Nom propre"}}
+async function claudeCategorize(items) {
+  const list = state.budgets.map(b => `- ${b.id} : ${b.name}`).join('\n');
+  const text = `Voici des dépenses d'un ménage belge (paiements Apple Pay ou lignes d'extrait BNP Paribas Fortis).
+Pour chacune, choisis le budget le plus adapté et donne un nom court et propre du bénéficiaire (ex. "Colruyt", "Luminus", "Proximus").
+Budgets (id : nom) :
+${list}
+
+Dépenses (libellé | détail) :
+${items.map(i => `- ${i.label}${i.detail ? ' | ' + i.detail : ''}`).join('\n')}
+
+Réponds UNIQUEMENT avec un objet JSON {"<libellé exactement comme écrit>": {"b": "<id du budget>", "n": "<nom propre>"}}.`;
+  return callClaude([{type: 'text', text}], 1500);
+}
+async function aiClassify(list) {
+  const todo = list.filter(e => e.review && !e.credit && e.merchant);
+  if (!todo.length || !state.settings.apiKey) return;
+  try {
+    const labels = [...new Map(todo.map(e => [e.merchant, {label: e.merchant, detail: e.note}])).values()].slice(0, 60);
+    const map = await claudeCategorize(labels);
+    todo.forEach(e => {
+      const v = map[e.merchant]; if (!v) return;
+      const b = typeof v === 'string' ? v : v.b;
+      if (budgetById(b)) e.budgetId = b;
+      if (v.n) { e.key = e.key || normMerchant(e.merchant); e.merchant = String(v.n).slice(0, 60); }
+    });
+  } catch (err) { console.warn(err); }
+}
+
+/* ---------- boîte de réception Apple Pay (issues GitHub) ---------- */
+function parseInbox(body) {
+  const out = {};
+  String(body).split(/\r?\n/).forEach(line => {
+    const m = line.match(/^\s*([^=:]+?)\s*[=:]\s*(.*)$/);
+    if (m) out[m[1].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')] = m[2].trim();
+  });
+  return out;
+}
+
+/* ---------- compte bancaire (robot GitHub + Enable Banking) ---------- */
+const GH_API = 'https://api.github.com';
+function ghFetch(path, opt = {}) {
+  const {ghRepo, ghToken} = state.settings;
+  return fetch(`${GH_API}/repos/${ghRepo}${path}`, {cache: 'no-store', ...opt,
+    headers: {Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', ...(opt.headers || {})}});
+}
+async function ghFile(path) {
+  const r = await ghFetch(`/contents/${path}`, {headers: {Accept: 'application/vnd.github.raw+json'}});
+  if (r.status === 404) return null;
+  if (r.status === 403) throw new Error('Le jeton GitHub doit aussi avoir l\'accès « Contents : Read-only ».');
+  if (!r.ok) throw new Error(`Erreur GitHub (${r.status}).`);
+  return r.json();
+}
+async function ghIssue(title, body) {
+  const r = await ghFetch('/issues', {method: 'POST', body: JSON.stringify({title, body})});
+  if (!r.ok) throw new Error(r.status === 403 || r.status === 404 ? 'Le jeton GitHub n\'a pas accès aux issues du dépôt.' : `Erreur GitHub (${r.status}).`);
+  return (await r.json()).number;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function bankStatusText() {
+  const st = state.bank.status || {};
+  const d = x => new Date(x).toLocaleDateString('fr-BE', {day: 'numeric', month: 'long', year: 'numeric'});
+  if (st.state === 'ok') return `✅ Connecté${st.valid_until ? ` · accès valable jusqu'au ${d(st.valid_until)}` : ''}${st.last_sync ? ` · dernière synchro ${new Date(st.last_sync).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}` : ''}`;
+  if (st.state === 'expired') return '⚠️ Accès expiré : reconnecte-toi.';
+  if (st.state === 'error') return '❌ ' + esc(st.message || 'Erreur du robot bancaire.');
+  if (st.state === 'connecting') return '⏳ Connexion en cours…';
+  return 'Pas encore connecté.';
+}
+
+// Nom lisible d'une ligne d'extrait : bénéficiaire, sinon communication sans le jargon bancaire
+const BANK_STOP = /^(paiement|payement|betaling|avec|met|la|le|les|de|du|des|van|carte|kaart|debit|debet|numero|nummer|domiciliation|domiciliering|virement|overschrijving|europeen|europese|sepa|instantane|instant|bancontact|maestro|visa|mastercard|apple|pay|google|contactless|sans|contact|achat|aankoop|date|valeur|reference|ref|communication|mededeling|be\d*|x+|[\d/.:,-]+)$/i;
+function bankName(t) {
+  const raw = t.party || String(t.label || '').split(/\s+/).filter(w => !BANK_STOP.test(w)).slice(0, 4).join(' ');
+  return raw.toLowerCase().replace(/(^|[\s-])\S/g, c => c.toUpperCase()).slice(0, 60) || 'Mouvement bancaire';
+}
+// Dépense déjà connue (Apple Pay, encodée, récurrente) correspondant à un débit bancaire
+function matchExisting(t, key) {
+  const amt = -t.amount;
+  return state.expenses.find(e => !e.bankId && !e.income && e.amount > 0 && Math.abs(e.amount - amt) < 0.01
+      && daysBetween(e.date, t.date) <= (e.recId ? 6 : 4))
+    || state.expenses.find(e => !e.bankId && e.recId && daysBetween(e.date, t.date) <= 6
+      && Math.abs(e.amount - amt) / amt <= 0.25 && firstWord(e.merchant) === firstWord(key));
+}
+// Récurrente pas encore inscrite ce mois-ci et prélevée en avance
+function matchRecurring(t, key) {
+  const ym = t.date.slice(0, 7), amt = -t.amount;
+  return state.recurring.find(r => r.active && r.start <= ym && !(r.done || []).includes(ym)
+    && daysBetween(dueDate(r, ym), t.date) <= 6
+    && (Math.abs(r.amount - amt) < 0.01 || (firstWord(r.name) === firstWord(key) && Math.abs(r.amount - amt) / amt <= 0.25)));
+}
+
+function importBank(list) {
+  const B = state.bank, seen = new Set(B.seen), added = [];
+  if (!B.since) {
+    // première connexion : l'import démarre au dernier salaire reçu (ou au 1er du mois en mode mois civil)
+    const sal = salaryMode() && list.filter(t => t.amount > 0 && isSalary(normMerchant(bankName(t)), +String(t.date).slice(8, 10)))
+      .map(t => t.date).sort().pop();
+    B.since = sal || (salaryMode() ? per().start : localISO().slice(0, 7) + '-01');
+  }
+  for (const t of list) {
+    if (!t || !t.id || seen.has(t.id)) continue;
+    seen.add(t.id); B.seen.push(t.id);
+    if (!t.date || t.date < B.since || !t.amount) continue;
+    const name = bankName(t), key = normMerchant(name), base = {id: uid(), created: Date.now(), source: 'banque', bankId: t.id,
+      date: t.date, merchant: name, key, note: String(t.label || '').slice(0, 80)};
+    if (t.amount < 0) {
+      const m = matchExisting(t, key);
+      if (m) { m.bankId = t.id; if (m.recId) m.amount = -t.amount; continue; }
+      const r = matchRecurring(t, key);
+      if (r) { (r.done = r.done || []).push(t.date.slice(0, 7)); state.expenses.push({...base, amount: -t.amount, budgetId: r.budgetId, recId: r.id, merchant: r.name, review: false}); continue; }
+      const g = guessTarget(key);
+      const e = {...base, amount: -t.amount, budgetId: g?.budgetId || state.budgets[0]?.id, review: !g};
+      state.expenses.push(e); added.push(e);
+    } else {
+      const g = isSalary(key, +t.date.slice(8, 10)) ? {income: true} : guessTarget(key, true);
+      const e = g?.budgetId ? {...base, credit: true, amount: -t.amount, budgetId: g.budgetId, review: false}
+        : {...base, credit: true, income: true, amount: t.amount, budgetId: null, review: !g};
+      state.expenses.push(e); added.push(e);
+    }
+  }
+  B.seen = B.seen.slice(-5000);
+  return added;
+}
+
+let bankSyncing = false;
+async function syncBank(manual = false) {
+  const {ghRepo, ghToken} = state.settings;
+  if (!ghRepo || !ghToken || bankSyncing) return;
+  bankSyncing = true;
+  try {
+    const st = await ghFile('data/status.json');
+    if (!st) { if (manual) toast('Robot bancaire pas encore installé (voir README).'); return; }
+    state.bank.status = st;
+    let added = [];
+    if (st.last_sync) {
+      const data = await ghFile('data/transactions.json');
+      added = importBank(data?.transactions || []);
+      await aiClassify(added);
+    }
+    save(); render();
+    if (added.length) {
+      const n = added.length, s = n > 1 ? 's' : '';
+      toast(`${n} mouvement${s} bancaire${s} importé${s}`);
+    }
+  } catch (err) {
+    if (manual) toast(err.message); else console.warn(err);
+  } finally { bankSyncing = false; }
+}
+
+async function bankConnect() {
+  loading(true, 'Préparation de la connexion bancaire…');
+  try {
+    const n = await ghIssue('banque connecter', 'Demande envoyée depuis l\'app Budget Famille.');
+    for (let i = 0; i < 40; i++) {
+      await sleep(4000);
+      const r = await ghFetch(`/issues/${n}/comments`);
+      const c = r.ok ? await r.json() : [];
+      const url = c.map(x => x.body || '').find(b => b.startsWith('url='));
+      const err = c.map(x => x.body || '').find(b => b.startsWith('erreur='));
+      if (err) throw new Error(err.slice(7));
+      if (url) {
+        ghFetch(`/issues/${n}`, {method: 'PATCH', body: JSON.stringify({state: 'closed'})}).catch(() => {});
+        state.bank.pending = Date.now(); save();
+        location.href = url.slice(4).trim();
+        return;
+      }
+    }
+    throw new Error('Le robot ne répond pas. Vérifie qu\'il est bien installé (onglet Actions du dépôt).');
+  } catch (err) { loading(false); toast(err.message); }
+}
+
+async function bankSendCode(code) {
+  code = String(code || '').trim();
+  if (!code) return toast('Colle d\'abord le code.');
+  const before = state.bank.status?.last_sync || '';
+  loading(true, 'Connexion à ton compte… (1 à 2 minutes)');
+  try {
+    const n = await ghIssue('banque code', `code=${code}`);
+    state.bank.pending = null; save();
+    for (let i = 0; i < 45; i++) {
+      await sleep(5000);
+      const r = await ghFetch(`/issues/${n}/comments`);
+      const err = (r.ok ? await r.json() : []).map(x => x.body || '').find(b => b.startsWith('erreur='));
+      if (err) throw new Error(err.slice(7));
+      const st = await ghFile('data/status.json').catch(() => null);
+      if (st?.state === 'ok' && st.last_sync && st.last_sync !== before) {
+        state.bank.status = st; loading(false);
+        await syncBank(true);
+        view = {name: 'home'}; render();
+        toast('Compte bancaire connecté ✓');
+        return;
+      }
+    }
+    throw new Error('Toujours en cours : réessaie 🔄 dans quelques minutes.');
+  } catch (err) { loading(false); toast(err.message); }
+}
+
+// Page de retour de la banque ouverte hors de l'app (Safari) : on affiche le code à recopier
+function showBankCode(code) {
+  openSheet(`<h3>Connexion bancaire réussie<button class="icon-btn" data-a="close">✕</button></h3>
+    <p>Dernière étape : copie ce code, retourne dans l'app <b>Budget</b> (icône sur l'écran d'accueil) → ⚙️ → <i>Compte bancaire</i> → <b>Coller</b> → <b>Envoyer le code</b>.</p>
+    <input id="codeOut" readonly value="${esc(code)}">
+    <button class="btn primary" data-a="copy-code">📋 Copier le code</button>
+    <p class="hint">Le code n'est valable que quelques minutes.</p>`);
+}
+
+let syncing = false;
+async function syncInbox(manual = false) {
+  const {ghRepo, ghToken} = state.settings;
+  if (!ghRepo || !ghToken) { if (manual) toast('Configure la réception Apple Pay dans les réglages.'); return; }
+  if (syncing) return;
+  syncing = true;
+  try {
+    const base = `https://api.github.com/repos/${ghRepo}`;
+    const h = {Authorization: `Bearer ${ghToken}`, Accept: 'application/vnd.github+json'};
+    const r = await fetch(`${base}/issues?state=open&per_page=100&sort=created&direction=asc`, {headers: h, cache: 'no-store'});
+    if (!r.ok) throw new Error(r.status === 401 ? 'Jeton GitHub invalide ou expiré.'
+      : r.status === 404 ? 'Dépôt introuvable : vérifie son nom et les droits du jeton.' : `Erreur GitHub (${r.status}).`);
+    const issues = (await r.json()).filter(i => !i.pull_request && /^d[ée]pense/i.test(i.title || ''));
+    const seen = new Set(state.expenses.map(e => e.inbox).filter(Boolean));
+    const added = [];
+    for (const i of issues) {
+      if (!seen.has(i.number)) {
+        const f = parseInbox(i.body || '');
+        const amount = num(f.montant ?? f.amount);
+        if (amount > 0) {
+          const merchant = String(f.commercant ?? f.merchant ?? '').trim().slice(0, 60);
+          const date = /^\d{4}-\d{2}-\d{2}/.test(f.date || '') ? f.date.slice(0, 10) : localISO(new Date(i.created_at));
+          const known = guessBudget(merchant);
+          const e = {id: uid(), created: Date.now(), source: 'apple-pay', inbox: i.number, amount, date, merchant, key: normMerchant(merchant), note: '',
+            budgetId: known || state.budgets[0]?.id, review: !known};
+          state.expenses.push(e); added.push(e);
+        }
+      }
+      // on ferme l'issue ; si ça échoue, le numéro mémorisé évite un doublon
+      fetch(`${base}/issues/${i.number}`, {method: 'PATCH', headers: {...h, 'Content-Type': 'application/json'},
+        body: JSON.stringify({state: 'closed'})}).catch(() => {});
+    }
+    await aiClassify(added);
+    if (added.length) {
+      save(); render();
+      const n = added.length, s = n > 1 ? 's' : '';
+      toast(`${n} paiement${s} Apple Pay ajouté${s}`);
+    } else if (manual) toast('Aucun nouveau paiement.');
+  } catch (err) {
+    if (manual) toast(err.message || 'Synchronisation impossible.'); else console.warn(err);
+  } finally { syncing = false; }
+}
+
+async function handleScan(file) {
+  if (!file) return;
+  if (!state.settings.apiKey) {
+    toast('Ajoute d\'abord ta clé API dans les réglages ⚙️');
+    closeSheet(); view = {name: 'settings'}; render(); return;
+  }
+  loading(true);
+  try {
+    pendingImg = await compress(file);
+    pending = await analyze(pendingImg);
+    loading(false);
+    if (!pending.length) { toast('Aucune dépense trouvée sur cette image.'); return; }
+    openReview();
+  } catch (err) {
+    loading(false);
+    toast(err.message || 'Échec de la lecture.');
+  }
+}
+
+/* ---------- divers ---------- */
+function loading(on, text = 'Lecture du ticket…') {
+  const el = $('#loadingEl');
+  if (on && el) el.lastChild.textContent = text;
+  if (on && !el) document.body.insertAdjacentHTML('beforeend', `<div class="loading" id="loadingEl"><div class="spin"></div><span>${esc(text)}</span></div>`);
+  if (!on && el) el.remove();
+}
+let toastT;
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  document.body.insertAdjacentHTML('beforeend', `<div class="toast">${esc(msg)}</div>`);
+  clearTimeout(toastT); toastT = setTimeout(() => document.querySelectorAll('.toast').forEach(t => t.remove()), 3500);
+}
+function shiftMonth(d) {
+  pym = ymAdd(per().ym, d);
+  followCurrent = pym === curYm();
+  render();
+}
+function exportData() {
+  const copy = JSON.parse(JSON.stringify(state)); copy.settings.apiKey = ''; copy.settings.ghToken = '';
+  const blob = new Blob([JSON.stringify(copy, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `budget-famille-${localISO()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- événements ---------- */
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-a]');
+  if (!el) return;
+  const a = el.dataset.a, id = el.dataset.id;
+  if (a === 'backdrop') { if (ev.target === el) closeSheet(); return; }
+  switch (a) {
+    case 'settings': view = {name: 'settings'}; render(); scrollTo(0, 0); break;
+    case 'back': view = {name: 'home'}; render(); break;
+    case 'prev': shiftMonth(-1); break;
+    case 'next': shiftMonth(1); break;
+    case 'open-budget': view = {name: 'budget', id}; render(); scrollTo(0, 0); break;
+    case 'fab':
+      if (!state.budgets.length) { toast('Crée d\'abord un budget.'); break; }
+      openExpense({budgetId: view.id || state.budgets[0].id,
+        date: isCurrent() ? localISO() : per().start});
+      break;
+    case 'open-exp': openExpense(state.expenses.find(e => e.id === id)); break;
+    case 'close': closeSheet(); break;
+    case 'scan-cam': $('#camIn').click(); break;
+    case 'scan-file': $('#fileIn').click(); break;
+    case 'tx-toggle': $('#tx' + el.dataset.i).classList.toggle('off', !el.checked); break;
+    case 'del-exp':
+      if (confirm('Supprimer cette dépense ?')) { state.expenses = state.expenses.filter(e => e.id !== id); save(); closeSheet(); render(); }
+      break;
+    case 'add-budget': openBudget({}); break;
+    case 'edit-budget': openBudget(budgetById(id)); break;
+    case 'del-budget': {
+      const n = state.expenses.filter(e => e.budgetId === id).length;
+      if (confirm(n ? `Supprimer ce budget et ses ${n} dépense(s) ?` : 'Supprimer ce budget ?')) {
+        state.budgets = state.budgets.filter(b => b.id !== id);
+        state.expenses = state.expenses.filter(e => e.budgetId !== id);
+        save(); closeSheet(); render();
+      }
+      break;
+    }
+    case 'sync': syncInbox(true); syncBank(true); break;
+    case 'assign': {
+      const e = state.expenses.find(x => x.id === id);
+      if (!e) break;
+      if (el.dataset.b === '__income') { e.income = true; e.budgetId = null; e.amount = Math.abs(e.amount); }
+      else { e.budgetId = el.dataset.b; e.income = false; if (e.credit) e.amount = -Math.abs(e.amount); }
+      e.review = false; save(); render();
+      break;
+    }
+    case 'open-income': view = {name: 'income'}; render(); scrollTo(0, 0); break;
+    case 'bank-connect': bankConnect(); break;
+    case 'bank-code': bankSendCode($('#bc')?.value); break;
+    case 'bank-paste':
+      navigator.clipboard?.readText().then(t => { $('#bc').value = t.trim(); }).catch(() => toast('Colle le code à la main (appui long).'));
+      break;
+    case 'copy-code':
+      navigator.clipboard?.writeText($('#codeOut').value).then(() => toast('Code copié ✓')).catch(() => { $('#codeOut').select(); toast('Sélectionné : copie-le.'); });
+      break;
+    case 'del-rv':
+      state.expenses = state.expenses.filter(e => e.id !== id); save(); render(); toast('Paiement ignoré.');
+      break;
+    case 'add-rec': if (!state.budgets.length) { toast('Crée d\'abord un budget.'); break; } openRecurring({active: true}); break;
+    case 'edit-rec': openRecurring(state.recurring.find(r => r.id === id)); break;
+    case 'del-rec':
+      if (confirm('Supprimer cette dépense récurrente ? Les dépenses déjà inscrites sont conservées.')) {
+        state.recurring = state.recurring.filter(r => r.id !== id); save(); closeSheet(); render();
+      }
+      break;
+    case 'export': exportData(); break;
+    case 'import': $('#importIn').click(); break;
+    case 'reset':
+      if (confirm('Effacer tous les budgets et toutes les dépenses ?') && confirm('Vraiment ? Cette action est définitive.')) {
+        const key = state.settings.apiKey; state = defaults(); state.settings.apiKey = key; save(); render(); toast('Données effacées.');
+      }
+      break;
+  }
+});
+
+document.addEventListener('submit', ev => {
+  ev.preventDefault();
+  const f = ev.target, d = Object.fromEntries(new FormData(f));
+  if (f.id === 'expForm') {
+    const amount = num(d.amount);
+    if (!(amount > 0)) return toast('Montant invalide.');
+    const data = {amount, date: d.date, budgetId: d.budgetId, merchant: d.merchant.trim(), note: d.note.trim(), review: false};
+    const old = f.dataset.id && state.expenses.find(e => e.id === f.dataset.id);
+    if (old?.credit) {
+      data.income = d.budgetId === '__income';
+      if (data.income) data.budgetId = null; else data.amount = -amount;
+    }
+    if (old) Object.assign(old, data);
+    else {
+      const exp = {id: uid(), created: Date.now(), source: 'manuel', ...data};
+      if (d.repeat) {
+        const ym = data.date.slice(0, 7);
+        const r = {id: uid(), name: data.merchant || data.note || 'Dépense fixe', amount, budgetId: data.budgetId,
+          day: Number(data.date.slice(8, 10)), start: ym, done: [ym], active: true};
+        state.recurring.push(r); exp.recId = r.id; exp.source = 'recurrent';
+      }
+      state.expenses.push(exp);
+    }
+    applyRecurring();
+    save(); closeSheet(); render(); toast(d.repeat ? 'Enregistrée, et répétée chaque mois 🔁' : 'Dépense enregistrée ✓');
+  }
+  if (f.id === 'recForm') {
+    const amount = num(d.amount), day = Math.min(31, Math.max(1, parseInt(d.day, 10) || 1));
+    if (!(amount > 0)) return toast('Montant invalide.');
+    const data = {name: d.name.trim(), amount, day, budgetId: d.budgetId};
+    if (f.dataset.id) Object.assign(state.recurring.find(r => r.id === f.dataset.id), data, {active: !!d.active});
+    else state.recurring.push({id: uid(), ...data, start: d.start, done: [], active: true});
+    const n = applyRecurring();
+    save(); closeSheet(); render(); toast(n ? `Enregistrée · ${n} prélèvement inscrit ✓` : 'Dépense récurrente enregistrée ✓');
+  }
+  if (f.id === 'reviewForm') {
+    let n = 0;
+    pending.forEach((_, i) => {
+      if (!d['on' + i]) return;
+      const amount = num(d['amount' + i]);
+      if (!(amount > 0)) return;
+      state.expenses.push({id: uid(), created: Date.now(), source: 'scan', amount, date: d['date' + i],
+        budgetId: d['budgetId' + i], merchant: (d['merchant' + i] || '').trim(), note: pending[i].note || ''});
+      n++;
+    });
+    pending = []; pendingImg = '';
+    save(); closeSheet(); render(); toast(n ? `${n} dépense${n > 1 ? 's' : ''} ajoutée${n > 1 ? 's' : ''} ✓` : 'Rien ajouté.');
+  }
+  if (f.id === 'budgetForm') {
+    const amount = num(d.amount);
+    if (!(amount >= 0)) return toast('Montant invalide.');
+    const data = {name: d.name.trim(), amount, emoji: d.emoji.trim() || '💶', color: d.color};
+    if (f.dataset.id) Object.assign(budgetById(f.dataset.id), data);
+    else state.budgets.push({id: uid(), ...data});
+    save(); closeSheet(); render(); toast('Budget enregistré ✓');
+  }
+  if (f.id === 'settingsForm') {
+    state.settings.apiKey = d.apiKey.trim(); state.settings.model = d.model;
+    state.settings.ghRepo = d.ghRepo.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$|\/+$/g, '');
+    state.settings.ghToken = d.ghToken.trim();
+    state.settings.period = d.period;
+    state.settings.salaryPayer = d.salaryPayer.trim();
+    state.settings.salaryDay = Math.min(31, Math.max(1, parseInt(d.salaryDay, 10) || 25));
+    followCurrent = true;
+    save(); render(); toast('Réglages enregistrés ✓');
+    syncInbox(true);
+  }
+});
+
+['camIn', 'fileIn'].forEach(id => $('#' + id).addEventListener('change', e => {
+  const file = e.target.files[0]; e.target.value = ''; handleScan(file);
+}));
+
+$('#importIn').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  try {
+    const s = JSON.parse(await file.text());
+    if (!Array.isArray(s.budgets) || !Array.isArray(s.expenses)) throw 0;
+    if (!confirm(`Remplacer les données actuelles par cette sauvegarde (${s.budgets.length} budgets, ${s.expenses.length} dépenses) ?`)) return;
+    const {apiKey, ghToken, ghRepo} = state.settings;
+    state = {budgets: s.budgets, expenses: s.expenses, recurring: Array.isArray(s.recurring) ? s.recurring : [],
+      bank: {...defaults().bank, ...(s.bank || {})},
+      settings: {...defaults().settings, ...(s.settings || {}), apiKey, ghToken, ghRepo: ghRepo || s.settings?.ghRepo || ''}};
+    save(); render(); toast('Sauvegarde restaurée ✓');
+  } catch (err) { toast('Fichier de sauvegarde invalide.'); }
+});
+
+/* ---------- démarrage ---------- */
+applyRecurring();
+render();
+(() => {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('code') && !q.has('error')) return;
+  history.replaceState(null, '', location.pathname);
+  if (q.get('error')) return toast('Connexion bancaire annulée : ' + (q.get('error_description') || q.get('error')));
+  if (state.settings.ghRepo && state.settings.ghToken) bankSendCode(q.get('code'));
+  else showBankCode(q.get('code'));
+})();
+syncInbox();
+syncBank();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (applyRecurring()) render(); syncInbox(); syncBank(); } });
+if (navigator.storage?.persist) navigator.storage.persist();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
