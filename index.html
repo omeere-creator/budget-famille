@@ -90,6 +90,11 @@ label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appea
 .acct-flow .muted{font-size:12px}
 .alert{border:1px solid var(--warn)}
 .alert .btn{margin-top:10px}
+.releve .rl{display:flex;justify-content:space-between;gap:12px;padding:7px 0;color:var(--muted)}
+.releve .rl.strong{color:var(--text);border-top:1px solid var(--line);padding-top:10px;margin-top:3px}
+.releve .rl.strong:first-child{border-top:0;margin-top:0;padding-top:0}
+.tag{font-size:12px;padding:1px 7px;border-radius:99px;background:var(--line);color:var(--text);white-space:nowrap}
+.tag.ok{background:#dcfce7;color:#166534}.tag.warn{background:#fef3c7;color:#92400e}
 .thumb{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px}
 </style>
 </head>
@@ -326,7 +331,7 @@ function monthNav(left) {
 function reviewHTML() {
   const list = state.expenses.filter(e => e.review).sort((x, y) => y.date.localeCompare(x.date));
   if (!list.length) return '';
-  const src = {'apple-pay': 'Apple Pay', banque: 'Compte bancaire'};
+  const src = {'apple-pay': 'Apple Pay', banque: 'Compte bancaire', reserve: 'Réservé'};
   return `<h2>À vérifier (${list.length})</h2><div class="card">${list.map(e => `
     <div class="rv">
       <div class="rv-top"><div class="grow"><div class="t">${esc(e.merchant || 'Mouvement')}</div>
@@ -357,7 +362,7 @@ function bankHTML() {
     : st.state === 'error' ? 'Synchronisation bancaire en erreur : ' + esc(st.message || '')
     : daysLeft !== null && daysLeft < 14 ? `L'accès à ton compte expire dans ${Math.max(daysLeft, 0)} jour${daysLeft > 1 ? 's' : ''}.` : '';
   return `${alert ? `<div class="card alert">⚠️ ${alert}<button class="btn primary" data-a="bank-connect">🏦 Renouveler l'accès bancaire</button></div>` : ''}
-    <div class="card acct" data-a="open-income">
+    <div class="card acct" data-a="open-releve">
       <div><div class="muted">Solde ${accts.length > 1 ? `de ${accts.length} comptes` : 'du compte'}${types.length ? ' · ' + types.join(', ') : ''}</div>
         <div class="big">${accts.length ? eur(bal) : '—'}</div>
         ${pend.length ? `<div class="muted num">${pend.length} opération${pend.length > 1 ? 's' : ''} en attente : ${pendSum < 0 ? '−' : '+'}${eur(Math.abs(pendSum))}${booked ? ` → <b>${eur(bal + pendSum)}</b> après débit` : ''}</div>` : ''}
@@ -416,7 +421,7 @@ function budgetHTML(id) {
     <div class="card">${list.length ? list.map(e => `
       <div class="row" data-a="open-exp" data-id="${e.id}">
         <div class="grow"><div class="t">${esc(e.merchant || 'Dépense')}</div>
-          <div class="muted">${shortDate(e.date)}${e.note ? ' · ' + esc(e.note) : ''}${e.source === 'scan' ? ' · 📷' : e.source === 'apple-pay' ? ' · ' : e.source === 'recurrent' || e.recId ? ' · 🔁' : e.source === 'banque' ? ' · 🏦' : ''}${e.review ? ' · à vérifier' : ''}</div></div>
+          <div class="muted">${shortDate(e.date)}${e.note ? ' · ' + esc(e.note) : ''}${e.source === 'scan' ? ' · 📷' : e.source === 'apple-pay' ? ' · ' : e.source === 'recurrent' || e.recId ? ' · 🔁' : e.source === 'banque' ? ' · 🏦' : ''}${e.pendKey && !e.bankId ? ' · réservé' : ''}${e.review ? ' · à vérifier' : ''}</div></div>
         <div class="num"><b>${eur(e.amount)}</b></div>
       </div>`).join('') : '<div class="empty">Rien sur cette période.</div>'}
     </div>
@@ -509,6 +514,7 @@ function render() {
   const app = $('#app');
   if (view.name === 'budget') app.innerHTML = budgetHTML(view.id);
   else if (view.name === 'income') app.innerHTML = incomeHTML();
+  else if (view.name === 'releve') app.innerHTML = releveHTML();
   else if (view.name === 'settings') app.innerHTML = settingsHTML();
   else app.innerHTML = homeHTML();
   $('#fab').hidden = view.name === 'settings';
@@ -788,7 +794,12 @@ function importBank(list) {
       date: t.date, merchant: name, key, note: String(t.label || '').slice(0, 80)};
     if (t.amount < 0) {
       const m = matchExisting(t, key);
-      if (m) { m.bankId = t.id; if (m.recId) m.amount = -t.amount; continue; }
+      if (m) {
+        m.bankId = t.id; m.account = t.account; delete m.pendKey;
+        if (m.source === 'reserve') { m.source = 'banque'; m.note = base.note; }
+        if (m.recId) m.amount = -t.amount;
+        continue;
+      }
       const r = matchRecurring(t, key);
       if (r) { (r.done = r.done || []).push(t.date.slice(0, 7)); state.expenses.push({...base, amount: -t.amount, budgetId: r.budgetId, recId: r.id, merchant: r.name, review: false}); continue; }
       const g = guessTarget(key);
@@ -803,6 +814,111 @@ function importBank(list) {
   }
   B.seen = B.seen.slice(-5000);
   return added;
+}
+
+/* ---------- réservations (opérations « Réservé » / en attente) ---------- */
+const pendKeyOf = t => ['R', t.account, t.date, t.amount, normMerchant(t.party || t.label)].join('|');
+// Les réservations comptent dans les budgets dès qu'elles apparaissent ; à la comptabilisation, la ligne est reprise
+// par le mouvement (même montant) ou retirée si le montant final diffère (le mouvement définitif arrive alors normalement).
+function syncReserved(pending) {
+  const B = state.bank;
+  const P = (pending || []).filter(t => t && t.amount < 0 && t.date && tracked(t.account) && t.date >= (B.since || '0'));
+  const keys = new Set(P.map(pendKeyOf));
+  state.expenses = state.expenses.filter(e => !(e.source === 'reserve' && !e.bankId && !keys.has(e.pendKey)));
+  state.expenses.forEach(e => { if (e.pendKey && !e.bankId && !keys.has(e.pendKey)) delete e.pendKey; });
+  const have = new Set(state.expenses.map(e => e.pendKey).filter(Boolean));
+  const added = [];
+  for (const t of P) {
+    const k = pendKeyOf(t);
+    if (have.has(k)) continue;
+    // déjà connue (Apple Pay, ticket, encodage) : on la marque simplement comme réservée
+    const m = state.expenses.find(e => !e.bankId && !e.pendKey && !e.income && Math.abs(e.amount + t.amount) < 0.01 && daysBetween(e.date, t.date) <= 4);
+    if (m) { m.pendKey = k; m.account = t.account; have.add(k); continue; }
+    const name = bankName(t), key = normMerchant(name), g = guessTarget(key);
+    const e = {id: uid(), created: Date.now(), source: 'reserve', pendKey: k, account: t.account, date: t.date, amount: -t.amount,
+      merchant: name, key, note: String(t.label || '').slice(0, 80), budgetId: g?.budgetId || state.budgets[0]?.id, review: !g};
+    state.expenses.push(e); added.push(e); have.add(k);
+  }
+  return added;
+}
+
+/* ---------- relevé : solde de départ + mouvements − réservations = solde de fin ---------- */
+const BOOKED_ORDER = ['ITBD', 'CLBD', 'OPBD', 'PRCD'], AVAIL_ORDER = ['ITAV', 'CLAV', 'XPCD'];
+function acctBalances() {
+  return (state.bank.status?.balances || []).filter(b => tracked(b.iban)).map(b => {
+    const all = b.all || [{type: b.type, amount: b.amount, date: b.date}];
+    const pick = order => order.map(t => all.find(x => x.type === t)).find(Boolean);
+    const bk = pick(BOOKED_ORDER), av = pick(AVAIL_ORDER);
+    return {iban: b.iban, name: b.name, booked: bk ? bk.amount : b.amount, bookedDate: bk?.date || null, available: av ? av.amount : null};
+  });
+}
+function releve(P) {
+  const raw = (state.bank.raw || []).filter(t => tracked(t.account));
+  const accts = acctBalances();
+  if (!accts.length || !raw.length) return null;
+  const today = localISO();
+  // solde comptabilisé actuel, y compris ce qui a été comptabilisé après la date de référence de la banque
+  const endBooked = accts.reduce((a, b) => a + b.booked + raw.filter(t => t.account === b.iban && b.bookedDate && t.date > b.bookedDate).reduce((x, t) => x + t.amount, 0), 0);
+  const balAt = d => endBooked - raw.filter(t => t.date >= d).reduce((a, t) => a + t.amount, 0);
+  const oldest = raw.reduce((m, t) => t.date < m ? t.date : m, today);
+  const current = P.end > today;
+  const moves = raw.filter(t => t.date >= P.start && t.date < P.end).sort((a, b) => b.date.localeCompare(a.date) || a.amount - b.amount);
+  const r = {start: balAt(P.start), end: current ? endBooked : balAt(P.end), complete: oldest <= P.start, current, moves,
+    in: moves.filter(t => t.amount > 0).reduce((a, t) => a + t.amount, 0), out: moves.filter(t => t.amount < 0).reduce((a, t) => a + t.amount, 0)};
+  if (current) {
+    const unbooked = state.expenses.filter(e => !e.bankId && !e.income && e.amount > 0 && e.date >= P.start).sort((a, b) => b.date.localeCompare(a.date));
+    r.reserved = unbooked.filter(e => e.pendKey);                        // réservations détaillées par la banque
+    r.waiting = unbooked.filter(e => !e.pendKey && e.source === 'apple-pay'); // payé, pas encore signalé par la banque
+    r.reservedSum = -r.reserved.reduce((a, e) => a + e.amount, 0);
+    const avail = accts.every(b => b.available !== null) ? accts.reduce((a, b) => a + b.available, 0) : null;
+    r.available = avail;
+    const gap = avail !== null ? avail - endBooked : null; // négatif = montant bloqué par la banque
+    r.other = gap !== null && gap < r.reservedSum - 0.5 && gap > -5000 ? gap - r.reservedSum : 0;
+  }
+  return r;
+}
+function releveHTML() {
+  const P = per(), r = releve(P);
+  const back = '<button class="icon-btn" data-a="back" aria-label="Retour">←</button>';
+  if (!r) return monthNav(back) + '<main><div class="card empty">Relevé disponible après la première synchronisation bancaire 🔄.</div></main>';
+  const f = d => new Date(d + 'T12:00').toLocaleDateString('fr-BE', {day: 'numeric', month: 'short'});
+  const sg = n => `${n < 0 ? '−' : '+'}${eur(Math.abs(n))}`;
+  const tag = t => {
+    const e = state.expenses.find(x => x.bankId === t.id);
+    if (!e) return '<span class="tag">hors budgets</span>';
+    if (e.income) return '<span class="tag ok">revenu</span>';
+    const b = budgetById(e.budgetId);
+    return `<span class="tag">${b ? esc(b.emoji + ' ' + b.name) : '—'}${e.credit ? ' ↩︎' : ''}${e.review ? ' · à vérifier' : ''}</span>`;
+  };
+  const line = (label, val, strong) => `<div class="rl ${strong ? 'strong' : ''}"><span>${label}</span><b class="num">${val}</b></div>`;
+  const endDay = r.current ? 'aujourd\'hui' : f(addDays(P.end, -1)) + ' au soir';
+  return monthNav(back) + `<main>
+    <div class="card releve">
+      ${line(`Solde au ${f(P.start)} au matin`, r.complete ? eur(r.start) : '—', true)}
+      ${line('Entrées', sg(r.in))}
+      ${line('Sorties comptabilisées', sg(r.out))}
+      ${line(`Solde comptabilisé ${endDay}`, eur(r.end), true)}
+      ${r.current && (r.reserved.length || r.other) ? `
+        ${r.reserved.length ? line(`Réservé (${r.reserved.length} opération${r.reserved.length > 1 ? 's' : ''})`, sg(r.reservedSum)) : ''}
+        ${r.other ? line('Autres montants bloqués par la banque', sg(r.other)) : ''}
+        ${line('Solde disponible', eur(r.end + r.reservedSum + r.other), true)}` : ''}
+      ${r.current && r.available !== null ? `<p class="hint">Disponible selon ta banque : ${eur(r.available)}${Math.abs(r.end + r.reservedSum + r.other - r.available) < 0.5 ? ' ✓ concordant' : ''}</p>` : ''}
+      ${r.complete ? '' : '<p class="hint">Historique bancaire trop court pour calculer le solde de départ de cette période.</p>'}
+    </div>
+    ${r.current && r.reserved.length ? `<h2>Réservé · pas encore comptabilisé</h2><div class="card">${r.reserved.map(e => `
+      <div class="row" data-a="open-exp" data-id="${e.id}"><div class="grow"><div class="t">${esc(e.merchant || 'Opération')}</div>
+        <div class="muted">${f(e.date)} · <span class="tag warn">réservé</span> ${e.source === 'apple-pay' && !e.pendKey ? '· Apple Pay' : ''}</div></div>
+        <b class="num">−${eur(e.amount)}</b></div>`).join('')}</div>` : ''}
+    ${r.current && r.other ? `<p class="hint" style="margin:0 4px 12px">La banque bloque ${eur(-r.other)} sans détailler les opérations${r.waiting.length ? ` — sans doute tes paiements Apple Pay ci-dessous (${eur(r.waiting.reduce((a, e) => a + e.amount, 0))})` : ' (préautorisations carte, carburant, hôtel…)'}. Ils passeront en « comptabilisé » d'ici 1 à 3 jours.</p>` : ''}
+    ${r.current && r.waiting.length ? `<h2>Payé · pas encore visible à la banque</h2><div class="card">${r.waiting.map(e => `
+      <div class="row" data-a="open-exp" data-id="${e.id}"><div class="grow"><div class="t">${esc(e.merchant || 'Paiement')}</div>
+        <div class="muted">${f(e.date)} · Apple Pay</div></div><b class="num">−${eur(e.amount)}</b></div>`).join('')}</div>` : ''}
+    <h2>Mouvements comptabilisés (${r.moves.length})</h2>
+    <div class="card">${r.moves.length ? r.moves.map(t => { const e = state.expenses.find(x => x.bankId === t.id); return `
+      <div class="row" ${e ? `data-a="open-exp" data-id="${e.id}"` : ''}><div class="grow"><div class="t">${esc(e?.merchant || bankName(t))}</div>
+        <div class="muted">${f(t.date)} · ${tag(t)}</div></div>
+        <b class="num" ${t.amount > 0 ? 'style="color:var(--ok)"' : ''}>${sg(t.amount)}</b></div>`; }).join('') : '<div class="empty">Aucun mouvement.</div>'}</div>
+  </main>`;
 }
 
 let bankRefreshing = false;
@@ -836,7 +952,12 @@ async function syncBank(manual = false) {
     let added = [];
     if (st.last_sync) {
       const data = await ghFile('data/transactions.json');
-      added = importBank(data?.transactions || []);
+      const list = data?.transactions || [];
+      const cutoff = addDays(localISO(), -200);
+      state.bank.raw = list.filter(t => t && t.id && t.date >= cutoff)
+        .map(({id, date, amount, party, label, account}) => ({id, date, amount, party, label: String(label || '').slice(0, 80), account}));
+      added = importBank(list);
+      added.push(...syncReserved(st.pending));
       await aiClassify(added);
     }
     save(); render();
@@ -1056,6 +1177,7 @@ document.addEventListener('click', ev => {
       break;
     }
     case 'open-income': view = {name: 'income'}; render(); scrollTo(0, 0); break;
+    case 'open-releve': view = {name: 'releve'}; render(); scrollTo(0, 0); break;
     case 'bank-connect': bankConnect(); break;
     case 'bank-code': bankSendCode($('#bc')?.value); break;
     case 'bank-paste':
