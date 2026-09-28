@@ -686,11 +686,22 @@ async function aiClassify(list) {
 
 /* ---------- boîte de réception Apple Pay (issues GitHub) ---------- */
 function parseInbox(body) {
+  // Accepte "montant=… commercant=…" sur une ou plusieurs lignes, séparés ou non par ; , ou retour à la ligne
+  const txt = String(body).normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const keys = 'montant|amount|commercant|merchant|date';
+  const re = new RegExp(`(${keys})\\s*[=:]\\s*([\\s\\S]*?)(?=(?:${keys})\\s*[=:]|[\\n;|]|$)`, 'gi');
   const out = {};
-  String(body).split(/\r?\n/).forEach(line => {
-    const m = line.match(/^\s*([^=:]+?)\s*[=:]\s*(.*)$/);
-    if (m) out[m[1].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')] = m[2].trim();
-  });
+  let m;
+  while ((m = re.exec(String(body).normalize('NFD').replace(/[̀-ͯ]/g, '')))) {
+    const k = m[1].toLowerCase(), v = m[2].trim().replace(/[,;]$/, '').trim();
+    if (v && !(k in out)) out[k] = v;
+    if (re.lastIndex === m.index) re.lastIndex++;
+  }
+  // le nom du commerçant garde ses accents d'origine
+  if (out.commercant || out.merchant) {
+    const orig = String(body).match(/(?:commer[cç]ant|merchant)\s*[=:]\s*([^\n;|]*?)(?=(?:montant|amount|date)\s*[=:]|[\n;|]|$)/i);
+    if (orig) out.commercant = orig[1].trim();
+  }
   return out;
 }
 
@@ -1090,7 +1101,7 @@ document.addEventListener('submit', ev => {
     state.settings.salaryDay = Math.min(31, Math.max(1, parseInt(d.salaryDay, 10) || 25));
     followCurrent = true;
     save(); render(); toast('Réglages enregistrés ✓');
-    syncInbox(true);
+    if (state.settings.ghRepo && state.settings.ghToken) { syncInbox(true); syncBank(); }
   }
 });
 
