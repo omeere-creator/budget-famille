@@ -141,7 +141,7 @@ function defaults() {
     expenses: [],
     recurring: [],
     bank: {since: null, seen: [], status: {}, pending: null},
-    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25}
+    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: []}
   };
 }
 function load() {
@@ -339,20 +339,29 @@ function reviewHTML() {
     <p class="hint">Touche le bon choix pour confirmer ; ce commerçant sera ensuite classé tout seul. ↩︎ = remboursement déduit du budget. « Ignorer » pour les transferts vers ton épargne.</p></div>`;
 }
 
+const tracked = iban => !(state.settings.bankExcluded || []).includes(iban);
+const BAL_TYPE = {ITAV: 'disponible', CLAV: 'disponible', XPCD: 'attendu', ITBD: 'comptabilisé', CLBD: 'comptabilisé hier soir', OPBD: 'd\'ouverture'};
 function bankHTML() {
   const st = state.bank.status || {};
   if (!state.bank.since && !st.state) return '';
   const inc = state.expenses.filter(e => e.income && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
   const out = state.expenses.filter(e => !e.income && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
-  const bal = (st.balances || []).reduce((a, b) => a + b.amount, 0);
+  const accts = (st.balances || []).filter(b => tracked(b.iban));
+  const bal = accts.reduce((a, b) => a + b.amount, 0);
+  const pend = (st.pending || []).filter(t => tracked(t.account));
+  const pendSum = pend.reduce((a, t) => a + t.amount, 0);
+  const types = [...new Set(accts.map(b => BAL_TYPE[b.type] || b.type).filter(Boolean))];
+  const booked = accts.length && accts.every(b => /BD$/.test(b.type || ''));
   const daysLeft = st.valid_until ? Math.floor((new Date(st.valid_until) - Date.now()) / 864e5) : null;
   const alert = st.state === 'expired' ? 'L\'accès à ton compte a expiré.'
     : st.state === 'error' ? 'Synchronisation bancaire en erreur : ' + esc(st.message || '')
     : daysLeft !== null && daysLeft < 14 ? `L'accès à ton compte expire dans ${Math.max(daysLeft, 0)} jour${daysLeft > 1 ? 's' : ''}.` : '';
   return `${alert ? `<div class="card alert">⚠️ ${alert}<button class="btn primary" data-a="bank-connect">🏦 Renouveler l'accès bancaire</button></div>` : ''}
     <div class="card acct" data-a="open-income">
-      <div><div class="muted">Solde du compte</div><div class="big">${st.balances?.length ? eur(bal) : '—'}</div>
-        <div class="muted">${st.last_sync ? 'mis à jour ' + new Date(st.last_sync).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : 'en attente de synchronisation'}</div></div>
+      <div><div class="muted">Solde ${accts.length > 1 ? `de ${accts.length} comptes` : 'du compte'}${types.length ? ' · ' + types.join(', ') : ''}</div>
+        <div class="big">${accts.length ? eur(bal) : '—'}</div>
+        ${pend.length ? `<div class="muted num">${pend.length} opération${pend.length > 1 ? 's' : ''} en attente : ${pendSum < 0 ? '−' : '+'}${eur(Math.abs(pendSum))}${booked ? ` → <b>${eur(bal + pendSum)}</b> après débit` : ''}</div>` : ''}
+        <div class="muted">${st.last_sync ? 'mis à jour ' + new Date(st.last_sync).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : 'en attente de synchronisation'}${bankRefreshing ? ' · synchronisation…' : ''}</div></div>
       <div class="acct-flow num"><div><span class="muted">Entrées</span><b style="color:var(--ok)">+${eur(inc)}</b></div>
         <div><span class="muted">Dépenses</span><b>−${eur(out)}</b></div>
         <div><span class="muted">Solde ${salaryMode() ? 'période' : 'du mois'}</span><b style="color:${inc - out >= 0 ? 'var(--ok)' : 'var(--danger)'}">${inc - out >= 0 ? '+' : '−'}${eur(Math.abs(inc - out))}</b></div></div>
@@ -470,6 +479,10 @@ function settingsHTML() {
         <div class="grid2" style="grid-template-columns:1fr auto"><input id="bc" autocomplete="off" autocapitalize="off" placeholder="colle le code ici">
           <button class="btn soft" style="margin:0;width:auto" data-a="bank-paste">Coller</button></div>
         <button class="btn soft" data-a="bank-code">Envoyer le code</button>
+        ${(state.bank.status?.balances || []).length ? `<label>Comptes suivis dans les budgets</label>
+          ${state.bank.status.balances.map(b => `<label class="check"><input type="checkbox" data-a="acct-toggle" data-iban="${esc(b.iban)}" ${tracked(b.iban) ? 'checked' : ''}>
+            ${esc(b.name || 'Compte')} · ${esc(String(b.iban).replace(/(.{4})/g, '$1 ').trim())} · ${eur(b.amount)}</label>`).join('')}
+          <p class="hint">Décoche ton compte d'épargne : ses mouvements (et les virements vers lui) ne compteront plus.</p>` : ''}
         <p class="hint">À n'utiliser que si, après la connexion à ta banque, une page t'a affiché un code à recopier.${state.bank.since ? ` Mouvements importés à partir du ${new Date(state.bank.since + 'T12:00').toLocaleDateString('fr-BE')}.` : ''}</p>`}
     </div>
 
@@ -768,9 +781,10 @@ function importBank(list) {
   }
   for (const t of list) {
     if (!t || !t.id || seen.has(t.id)) continue;
+    if (t.account && !tracked(t.account)) continue;
     seen.add(t.id); B.seen.push(t.id);
     if (!t.date || t.date < B.since || !t.amount) continue;
-    const name = bankName(t), key = normMerchant(name), base = {id: uid(), created: Date.now(), source: 'banque', bankId: t.id,
+    const name = bankName(t), key = normMerchant(name), base = {id: uid(), created: Date.now(), source: 'banque', bankId: t.id, account: t.account,
       date: t.date, merchant: name, key, note: String(t.label || '').slice(0, 80)};
     if (t.amount < 0) {
       const m = matchExisting(t, key);
@@ -791,6 +805,25 @@ function importBank(list) {
   return added;
 }
 
+let bankRefreshing = false;
+// Demande au robot une synchro immédiate (issue « banque synchro »), puis importe le résultat
+async function bankRefresh() {
+  const st = state.bank.status || {};
+  if (bankRefreshing || !st.state || st.state === 'not_connected') return;
+  bankRefreshing = true; render();
+  toast('Synchronisation bancaire lancée (≈ 1 min)…');
+  try {
+    const before = st.last_sync || '';
+    await ghIssue('banque synchro', 'Demandé depuis l\'app.');
+    for (let i = 0; i < 30; i++) {
+      await sleep(6000);
+      const s2 = await ghFile('data/status.json').catch(() => null);
+      if (s2 && s2.last_sync && s2.last_sync !== before) { bankRefreshing = false; await syncBank(true); toast('Compte à jour ✓'); return; }
+      if (s2 && (s2.state === 'error' || s2.state === 'expired') && s2.updated > (st.updated || '')) { state.bank.status = s2; save(); break; }
+    }
+  } catch (err) { toast(err.message); }
+  bankRefreshing = false; render();
+}
 let bankSyncing = false;
 async function syncBank(manual = false) {
   const {ghRepo, ghToken} = state.settings;
@@ -998,7 +1031,22 @@ document.addEventListener('click', ev => {
       }
       break;
     }
-    case 'sync': syncInbox(true); syncBank(true); break;
+    case 'sync': syncInbox(true); if (state.bank.status?.state === 'ok') bankRefresh(); else syncBank(true); break;
+    case 'acct-toggle': {
+      const ex = new Set(state.settings.bankExcluded || []);
+      const iban = el.dataset.iban;
+      if (el.checked) ex.delete(iban);
+      else {
+        ex.add(iban);
+        // retire ce qui a déjà été importé depuis ce compte (et l'oublie, pour pouvoir le réimporter plus tard)
+        const gone = new Set(state.expenses.filter(e => e.account === iban && e.source === 'banque').map(e => e.bankId));
+        state.expenses = state.expenses.filter(e => !(e.account === iban && e.source === 'banque'));
+        state.bank.seen = state.bank.seen.filter(id => !gone.has(id));
+      }
+      state.settings.bankExcluded = [...ex];
+      save(); render(); syncBank(true);
+      break;
+    }
     case 'assign': {
       const e = state.expenses.find(x => x.id === id);
       if (!e) break;
