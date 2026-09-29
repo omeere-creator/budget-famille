@@ -19,7 +19,7 @@
 html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 body{padding:env(safe-area-inset-top) 0 calc(100px + env(safe-area-inset-bottom))}
 header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 10px;display:flex;align-items:center;gap:8px;max-width:560px;margin:0 auto}
-header h1{flex:1;font-size:18px;margin:0;text-align:center}
+header h1{flex:1;min-width:0;font-size:18px;margin:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cap::first-letter{text-transform:uppercase}
 .icon-btn{border:0;background:var(--card);color:var(--text);min-width:40px;height:40px;border-radius:12px;font-size:18px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer}
 main{padding:0 16px;max-width:560px;margin:0 auto}
@@ -85,6 +85,7 @@ input:focus,select:focus{outline:2px solid var(--accent);border-color:transparen
 label.check{display:flex;align-items:center;gap:10px;color:var(--text);font-size:15px;margin-top:16px}
 label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appearance:checkbox;padding:0}
 .acct{cursor:pointer}
+.acct .fc{margin-top:6px;font-size:15px}
 .acct-flow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .acct-flow div{display:flex;flex-direction:column;gap:2px}
 .acct-flow .muted{font-size:12px}
@@ -146,7 +147,7 @@ function defaults() {
     expenses: [],
     recurring: [],
     bank: {since: null, seen: [], status: {}, pending: null},
-    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: []}
+    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: [], share: false, shareToken: '', shareAt: null, incomes: []}
   };
 }
 function load() {
@@ -162,7 +163,16 @@ function load() {
   return defaults();
 }
 let ver = 0; // version des données : invalide les caches de périodes
-function save() { ver++; localStorage.setItem(STORE, JSON.stringify(state)); }
+// Mode consultation : ce téléphone affiche le budget publié par le téléphone principal, sans rien modifier
+const VIEW_KEY = 'budget-famille-viewer', SNAP_KEY = 'budget-famille-partage';
+var VIEW = null, shareTimer = null, shareHash = '';
+try { VIEW = JSON.parse(localStorage.getItem(VIEW_KEY)) || null; } catch (e) {}
+function save() {
+  ver++;
+  if (VIEW) return; // en consultation, rien n'est enregistré ni publié
+  localStorage.setItem(STORE, JSON.stringify(state));
+  scheduleShare();
+}
 
 let state = load();
 let pym = null; // mois de début de la période affichée (ex. "2026-09" = période qui commence au salaire de septembre)
@@ -184,6 +194,8 @@ function guessTarget(key, credit = false) {
   for (let i = state.expenses.length - 1; i >= 0; i--) {
     const e = state.expenses[i];
     if (e.review || keyOf(e) !== key) continue;
+    if (e.transfer === 'epargne') return {transfer: 'epargne'};
+    if (e.transfer) continue;
     if (credit) {
       if (e.income) return {income: true};
       if (e.amount < 0 && budgetById(e.budgetId)) return {budgetId: e.budgetId};
@@ -322,13 +334,14 @@ function budgetCard(b, clickable = true) {
 function monthNav(left) {
   return `<header>${left}
     <button class="icon-btn" data-a="prev" aria-label="Mois précédent">‹</button>
-    <h1 class="cap">${periodLabel()}</h1>
+    <h1 class="cap">${VIEW ? '<span title="Consultation">👁 </span>' : ''}${periodLabel()}</h1>
     <button class="icon-btn" data-a="next" aria-label="Mois suivant">›</button>
     ${view.name === 'home' ? '<button class="icon-btn" data-a="settings" aria-label="Réglages">⚙️</button>' : '<span style="width:40px"></span>'}
   </header>`;
 }
 
 function reviewHTML() {
+  if (VIEW) return '';
   const list = state.expenses.filter(e => e.review).sort((x, y) => y.date.localeCompare(x.date));
   if (!list.length) return '';
   const src = {'apple-pay': 'Apple Pay', banque: 'Compte bancaire', reserve: 'Réservé'};
@@ -339,9 +352,10 @@ function reviewHTML() {
         <b class="num" ${e.credit ? 'style="color:var(--ok)"' : ''}>${e.credit ? '+' : ''}${eur(Math.abs(e.amount))}</b></div>
       <div class="chips">${e.credit ? `<button class="chip ${e.income ? 'on' : ''}" data-a="assign" data-id="${e.id}" data-b="__income">💶 Revenu</button>` : ''}
         ${state.budgets.map(b => `<button class="chip ${!e.income && b.id === e.budgetId ? 'on' : ''}" data-a="assign" data-id="${e.id}" data-b="${b.id}">${esc(b.emoji)} ${esc(b.name)}${e.credit ? ' ↩︎' : ''}</button>`).join('')}
+        <button class="chip" data-a="assign" data-id="${e.id}" data-b="__transfer">🏦 Épargne / virement</button>
         <button class="chip" data-a="del-rv" data-id="${e.id}" aria-label="Ignorer">🗑️ Ignorer</button></div>
     </div>`).join('')}
-    <p class="hint">Touche le bon choix pour confirmer ; ce commerçant sera ensuite classé tout seul. ↩︎ = remboursement déduit du budget. « Ignorer » pour les transferts vers ton épargne.</p></div>`;
+    <p class="hint">Touche le bon choix pour confirmer ; ce commerçant sera ensuite classé tout seul. ↩︎ = remboursement déduit du budget. « Épargne / virement » : hors budgets, et retenu pour les fois suivantes.</p></div>`;
 }
 
 const tracked = iban => !(state.settings.bankExcluded || []).includes(iban);
@@ -350,10 +364,11 @@ function bankHTML() {
   const st = state.bank.status || {};
   if (!state.bank.since && !st.state) return '';
   const inc = state.expenses.filter(e => e.income && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
-  const out = state.expenses.filter(e => !e.income && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
+  const out = state.expenses.filter(e => !e.income && !e.transfer && inPeriod(e.date)).reduce((a, e) => a + e.amount, 0);
   const accts = (st.balances || []).filter(b => tracked(b.iban));
   const bal = accts.reduce((a, b) => a + b.amount, 0);
-  const pend = (st.pending || []).filter(t => tracked(t.account));
+  const pend = (st.pending || []).filter(t => tracked(t.account) && t.date <= localISO());
+  const planned = (st.pending || []).filter(t => tracked(t.account) && t.date > localISO());
   const pendSum = pend.reduce((a, t) => a + t.amount, 0);
   const types = [...new Set(accts.map(b => BAL_TYPE[b.type] || b.type).filter(Boolean))];
   const booked = accts.length && accts.every(b => /BD$/.test(b.type || ''));
@@ -365,7 +380,9 @@ function bankHTML() {
     <div class="card acct" data-a="open-releve">
       <div><div class="muted">Solde ${accts.length > 1 ? `de ${accts.length} comptes` : 'du compte'}${types.length ? ' · ' + types.join(', ') : ''}</div>
         <div class="big">${accts.length ? eur(bal) : '—'}</div>
-        ${pend.length ? `<div class="muted num">${pend.length} opération${pend.length > 1 ? 's' : ''} en attente : ${pendSum < 0 ? '−' : '+'}${eur(Math.abs(pendSum))}${booked ? ` → <b>${eur(bal + pendSum)}</b> après débit` : ''}</div>` : ''}
+        ${planned.length ? `<div class="muted num">${planned.length} ordre${planned.length > 1 ? 's' : ''} programmé${planned.length > 1 ? 's' : ''} à venir : −${eur(-planned.reduce((a, t) => a + t.amount, 0))}</div>` : ''}
+        ${pend.length ? `<div class="muted num">${pend.length} opération${pend.length > 1 ? 's' : ''} réservée${pend.length > 1 ? 's' : ''} : ${pendSum < 0 ? '−' : '+'}${eur(Math.abs(pendSum))}${booked ? ` → <b>${eur(bal + pendSum)}</b> après débit` : ''}</div>` : ''}
+        ${(() => { const F = forecast(); return F ? `<div class="fc num">Prévu avant le prochain salaire : <b style="color:${F.end >= 0 ? 'var(--ok)' : 'var(--danger)'}">${eur(F.end)}</b></div>` : ''; })()}
         <div class="muted">${st.last_sync ? 'mis à jour ' + new Date(st.last_sync).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : 'en attente de synchronisation'}${bankRefreshing ? ' · synchronisation…' : ''}</div></div>
       <div class="acct-flow num"><div><span class="muted">Entrées</span><b style="color:var(--ok)">+${eur(inc)}</b></div>
         <div><span class="muted">Dépenses</span><b>−${eur(out)}</b></div>
@@ -389,7 +406,7 @@ function homeHTML() {
   const sp = state.budgets.reduce((s, b) => s + spent(b.id), 0);
   const pct = tot > 0 ? sp / tot : 0, C = 2 * Math.PI * 46;
   const color = pct >= 1 ? 'var(--danger)' : 'var(--accent)';
-  const inbox = state.settings.ghRepo && state.settings.ghToken;
+  const inbox = (state.settings.ghRepo && state.settings.ghToken) || VIEW;
   return monthNav(inbox ? '<button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button>' : '<span style="width:40px"></span>') + `<main>
     <div class="card summary">
       <svg class="ring" viewBox="0 0 108 108">
@@ -421,7 +438,7 @@ function budgetHTML(id) {
     <div class="card">${list.length ? list.map(e => `
       <div class="row" data-a="open-exp" data-id="${e.id}">
         <div class="grow"><div class="t">${esc(e.merchant || 'Dépense')}</div>
-          <div class="muted">${shortDate(e.date)}${e.note ? ' · ' + esc(e.note) : ''}${e.source === 'scan' ? ' · 📷' : e.source === 'apple-pay' ? ' · ' : e.source === 'recurrent' || e.recId ? ' · 🔁' : e.source === 'banque' ? ' · 🏦' : ''}${e.pendKey && !e.bankId ? ' · réservé' : ''}${e.review ? ' · à vérifier' : ''}</div></div>
+          <div class="muted">${shortDate(e.date)}${e.note ? ' · ' + esc(e.note) : ''}${e.source === 'scan' ? ' · 📷' : e.source === 'apple-pay' ? ' · ' : e.source === 'recurrent' || e.recId ? ' · 🔁' : e.source === 'banque' ? ' · 🏦' : ''}${e.pendKey && !e.bankId ? (e.planned ? ' · programmé' : ' · réservé') : ''}${e.review ? ' · à vérifier' : ''}</div></div>
         <div class="num"><b>${eur(e.amount)}</b></div>
       </div>`).join('') : '<div class="empty">Rien sur cette période.</div>'}
     </div>
@@ -432,6 +449,12 @@ function settingsHTML() {
   const s = state.settings;
   return `<header><button class="icon-btn" data-a="back" aria-label="Retour">←</button><h1>Réglages</h1><span style="width:40px"></span></header>
   <main>
+    ${state.settings.ghRepo ? shareSettingsHTML() : ''}
+    <h2>Consulter un budget partagé</h2>
+    <div class="card"><p class="hint" style="margin-top:0">Sur le téléphone d'un membre de la famille : colle le code de partage reçu.</p>
+      <input id="jcode" autocomplete="off" autocapitalize="off" placeholder="BF1-…">
+      <button class="btn soft" data-a="share-join">👁 Consulter ce budget</button></div>
+
     <h2>Budgets mensuels</h2>
     <div class="card">
       ${state.budgets.map(b => `<div class="row" data-a="edit-budget" data-id="${b.id}">
@@ -491,6 +514,18 @@ function settingsHTML() {
         <p class="hint">À n'utiliser que si, après la connexion à ta banque, une page t'a affiché un code à recopier.${state.bank.since ? ` Mouvements importés à partir du ${new Date(state.bank.since + 'T12:00').toLocaleDateString('fr-BE')}.` : ''}</p>`}
     </div>
 
+    <h2>Revenus attendus chaque mois</h2>
+    <div class="card">
+      ${(state.settings.incomes || []).map(i => `<div class="row" data-a="inc-del" data-id="${i.id}"><div class="grow"><div class="t">${esc(i.name)}</div>
+        <div class="muted">vers le ${i.day} · touche pour supprimer</div></div><div class="num" style="color:var(--ok)">+${eur(i.amount)}</div></div>`).join('')
+        || '<p class="hint" style="margin-top:0">Hors salaire Stellantis : loyer du studio, allocations familiales, autre salaire… Servent au « solde prévu avant le prochain salaire ».</p>'}
+      ${suggestIncomes().map((x, n) => `<button class="chip" style="margin:8px 6px 0 0" data-a="inc-sugg" data-n="${n}">+ ${esc(x.name)} · ${eur(x.amount)} (vers le ${x.day})</button>`).join('')}
+      <div class="grid2" style="grid-template-columns:2fr 1fr 1fr;margin-top:12px">
+        <input id="incN" placeholder="Nom (ex. Loyer studio)"><input id="incA" inputmode="decimal" placeholder="€"><input id="incD" type="number" min="1" max="31" placeholder="jour">
+      </div>
+      <button class="btn soft" data-a="inc-add">+ Ajouter ce revenu</button>
+    </div>
+
     <h2>Dépenses récurrentes</h2>
     <div class="card">
       ${state.recurring.length ? state.recurring.map(r => { const b = budgetById(r.budgetId); return `<div class="row" data-a="edit-rec" data-id="${r.id}">
@@ -515,9 +550,9 @@ function render() {
   if (view.name === 'budget') app.innerHTML = budgetHTML(view.id);
   else if (view.name === 'income') app.innerHTML = incomeHTML();
   else if (view.name === 'releve') app.innerHTML = releveHTML();
-  else if (view.name === 'settings') app.innerHTML = settingsHTML();
+  else if (view.name === 'settings') app.innerHTML = VIEW ? viewerSettingsHTML() : settingsHTML();
   else app.innerHTML = homeHTML();
-  $('#fab').hidden = view.name === 'settings';
+  $('#fab').hidden = view.name === 'settings' || !!VIEW;
 }
 
 /* ---------- feuilles (modales) ---------- */
@@ -539,7 +574,7 @@ function openExpense(e) {
         <div><label>Montant (€)${e.credit ? ' reçu' : ''}</label><input name="amount" inputmode="decimal" required placeholder="0,00" value="${e.amount != null ? String(Math.abs(e.amount)).replace('.', ',') : ''}"></div>
         <div><label>Date</label><input name="date" type="date" required value="${e.date || localISO()}"></div>
       </div>
-      <label>${e.credit ? 'Classement' : 'Budget'}</label><select name="budgetId">${e.credit ? `<option value="__income" ${e.income ? 'selected' : ''}>💶 Revenu (hors budgets)</option>` : ''}${budgetOptions(e.income ? null : e.budgetId)}</select>
+      <label>${e.credit ? 'Classement' : 'Budget'}</label><select name="budgetId">${e.credit ? `<option value="__income" ${e.income ? 'selected' : ''}>💶 Revenu (hors budgets)</option>` : ''}${budgetOptions(e.income || e.transfer ? null : e.budgetId)}<option value="__transfer" ${e.transfer ? 'selected' : ''}>🏦 Épargne / virement (hors budgets)</option></select>
       <label>${e.credit ? 'Émetteur' : 'Commerçant'}</label><input name="merchant" placeholder="Delhaize, Colruyt…" value="${esc(e.merchant)}">
       <label>Note</label><input name="note" placeholder="optionnel" value="${esc(e.note)}">
       ${isNew || !e.recId ? `<label class="check"><input type="checkbox" name="repeat"> 🔁 Répéter chaque mois à cette date</label>` : '<p class="hint">🔁 Dépense récurrente : modifie le modèle dans ⚙️ pour les mois suivants.</p>'}
@@ -777,7 +812,34 @@ function matchRecurring(t, key) {
     && (Math.abs(r.amount - amt) < 0.01 || (firstWord(r.name) === firstWord(key) && Math.abs(r.amount - amt) / amt <= 0.25)));
 }
 
+// Virement entre deux comptes suivis : l'IBAN de l'autre compte figure dans le libellé,
+// ou le mouvement inverse (même montant) existe sur l'autre compte à un jour près
+function internalDetector(list) {
+  const accts = [...new Set(list.map(t => t.account).filter(a => a && tracked(a)))];
+  if (accts.length < 2) return () => false;
+  const byAmt = new Map();
+  for (const t of list) { if (!tracked(t.account)) continue; const k = Math.abs(t.amount).toFixed(2); (byAmt.get(k) || byAmt.set(k, []).get(k)).push(t); }
+  return t => {
+    if (!t || !tracked(t.account)) return false;
+    const lab = String(t.label || '').replace(/\s/g, '').toUpperCase();
+    if (accts.some(a => a !== t.account && lab.includes(a))) return true;
+    return (byAmt.get(Math.abs(t.amount).toFixed(2)) || []).some(u => u.account !== t.account && Math.sign(u.amount) === -Math.sign(t.amount) && daysBetween(u.date, t.date) <= 1);
+  };
+}
+// Corrige après coup les mouvements déjà importés qui sont en réalité des virements internes
+function fixTransfers(list) {
+  const isInternal = internalDetector(list), byId = new Map(list.map(t => [t.id, t]));
+  let n = 0;
+  for (const e of state.expenses) {
+    if (!e.bankId || e.transfer) continue;
+    const t = byId.get(e.bankId);
+    if (t && isInternal(t)) { Object.assign(e, {transfer: 'interne', budgetId: null, income: false, review: false}); n++; }
+  }
+  return n;
+}
+
 function importBank(list) {
+  const isInternal = internalDetector(list);
   const B = state.bank, seen = new Set(B.seen), added = [];
   if (!B.since) {
     // première connexion : l'import démarre au dernier salaire reçu (ou au 1er du mois en mode mois civil)
@@ -792,6 +854,7 @@ function importBank(list) {
     if (!t.date || t.date < B.since || !t.amount) continue;
     const name = bankName(t), key = normMerchant(name), base = {id: uid(), created: Date.now(), source: 'banque', bankId: t.id, account: t.account,
       date: t.date, merchant: name, key, note: String(t.label || '').slice(0, 80)};
+    if (isInternal(t)) { state.expenses.push({...base, amount: -t.amount, credit: t.amount > 0, transfer: 'interne', budgetId: null, review: false}); continue; }
     if (t.amount < 0) {
       const m = matchExisting(t, key);
       if (m) {
@@ -803,10 +866,12 @@ function importBank(list) {
       const r = matchRecurring(t, key);
       if (r) { (r.done = r.done || []).push(t.date.slice(0, 7)); state.expenses.push({...base, amount: -t.amount, budgetId: r.budgetId, recId: r.id, merchant: r.name, review: false}); continue; }
       const g = guessTarget(key);
+      if (g?.transfer) { state.expenses.push({...base, amount: -t.amount, transfer: g.transfer, budgetId: null, review: false}); continue; }
       const e = {...base, amount: -t.amount, budgetId: g?.budgetId || state.budgets[0]?.id, review: !g};
       state.expenses.push(e); added.push(e);
     } else {
       const g = isSalary(key, +t.date.slice(8, 10)) ? {income: true} : guessTarget(key, true);
+      if (g?.transfer) { state.expenses.push({...base, credit: true, amount: -t.amount, transfer: g.transfer, budgetId: null, review: false}); continue; }
       const e = g?.budgetId ? {...base, credit: true, amount: -t.amount, budgetId: g.budgetId, review: false}
         : {...base, credit: true, income: true, amount: t.amount, budgetId: null, review: !g};
       state.expenses.push(e); added.push(e);
@@ -835,11 +900,57 @@ function syncReserved(pending) {
     const m = state.expenses.find(e => !e.bankId && !e.pendKey && !e.income && Math.abs(e.amount + t.amount) < 0.01 && daysBetween(e.date, t.date) <= 4);
     if (m) { m.pendKey = k; m.account = t.account; have.add(k); continue; }
     const name = bankName(t), key = normMerchant(name), g = guessTarget(key);
-    const e = {id: uid(), created: Date.now(), source: 'reserve', pendKey: k, account: t.account, date: t.date, amount: -t.amount,
-      merchant: name, key, note: String(t.label || '').slice(0, 80), budgetId: g?.budgetId || state.budgets[0]?.id, review: !g};
+    // date future = ordre permanent programmé : il compte dans son budget (engagé) mais n'est pas encore débité
+    const e = {id: uid(), created: Date.now(), source: 'reserve', pendKey: k, planned: t.date > localISO(), account: t.account, date: t.date, amount: -t.amount,
+      merchant: name, key, note: String(t.label || '').slice(0, 80), budgetId: g?.transfer ? null : (g?.budgetId || state.budgets[0]?.id),
+      transfer: g?.transfer || false, review: !g};
     state.expenses.push(e); added.push(e); have.add(k);
   }
+  state.expenses.forEach(e => { if (e.source === 'reserve' && !e.bankId && e.planned && e.date <= localISO()) e.planned = false; });
   return added;
+}
+
+/* ---------- prévision : solde attendu au prochain salaire ---------- */
+// Revenus attendus chaque mois (saisis dans ⚙️). Reconnus comme reçus dès qu'un revenu de montant proche (±15 %) arrive dans la période,
+// quel que soit le nom de l'émetteur (un loyer peut venir de locataires différents).
+function expectedIncomes(P) {
+  const got = state.expenses.filter(e => e.income && !e.transfer && e.amount > 0 && e.date >= P.start && e.date < P.end);
+  const used = new Set(), out = [];
+  for (const inc of state.settings.incomes || []) {
+    const m = got.find(e => !used.has(e.id) && Math.abs(e.amount - inc.amount) <= inc.amount * 0.15);
+    if (m) { used.add(m.id); continue; }
+    const due = [P.start.slice(0, 7), addDays(P.end, -1).slice(0, 7)].map(ym => `${ym}-${String(Math.min(inc.day, daysIn(ym))).padStart(2, '0')}`)
+      .find(d => d >= P.start && d < P.end) || localISO();
+    out.push({name: inc.name, amount: inc.amount, date: due < localISO() ? localISO() : due});
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+// Suggestions : même émetteur, montant stable (±15 %) au moins 2 mois sur les 3 derniers, hors salaire
+function suggestIncomes() {
+  const from = addDays(localISO(), -100), groups = new Map();
+  for (const e of state.expenses) if (e.income && !e.transfer && e.amount > 0 && e.date >= from) { const k = keyOf(e); if (k) (groups.get(k) || groups.set(k, []).get(k)).push(e); }
+  const have = state.settings.incomes || [], out = [];
+  for (const [k, list] of groups) {
+    const amts = list.map(e => e.amount).sort((a, b) => a - b), med = amts[Math.floor(amts.length / 2)];
+    const stable = list.filter(e => Math.abs(e.amount - med) <= med * 0.15);
+    if (new Set(stable.map(e => e.date.slice(0, 7))).size < 2) continue;
+    const days = stable.map(e => +e.date.slice(8, 10)).sort((a, b) => a - b), day = days[Math.floor(days.length / 2)];
+    if (isSalary(k, day) || have.some(i => Math.abs(i.amount - med) <= med * 0.15)) continue;
+    out.push({name: stable[stable.length - 1].merchant, amount: med, day});
+  }
+  return out;
+}
+function forecast() {
+  const P = per();
+  if (!isCurrent() || !state.bank.status?.balances?.length) return null;
+  const accts = acctBalances(); if (!accts.length) return null;
+  const today = localISO();
+  const available = accts.reduce((a, b) => a + (b.available ?? b.booked), 0);
+  const incomes = expectedIncomes(P);
+  const planned = state.expenses.filter(e => e.planned && !e.bankId && e.date > today && e.date < P.end);
+  const budgets = state.budgets.map(b => ({b, left: Math.max(0, b.amount - spent(b.id))})).filter(x => x.left > 0);
+  const inc = incomes.reduce((a, x) => a + x.amount, 0), pl = planned.reduce((a, e) => a + e.amount, 0), left = budgets.reduce((a, x) => a + x.left, 0);
+  return {P, available, incomes, inc, planned, pl, budgets, left, end: available + inc - pl - left};
 }
 
 /* ---------- relevé : solde de départ + mouvements − réservations = solde de fin ---------- */
@@ -866,8 +977,8 @@ function releve(P) {
   const r = {start: balAt(P.start), end: current ? endBooked : balAt(P.end), complete: oldest <= P.start, current, moves,
     in: moves.filter(t => t.amount > 0).reduce((a, t) => a + t.amount, 0), out: moves.filter(t => t.amount < 0).reduce((a, t) => a + t.amount, 0)};
   if (current) {
-    const unbooked = state.expenses.filter(e => !e.bankId && !e.income && e.amount > 0 && e.date >= P.start).sort((a, b) => b.date.localeCompare(a.date));
-    r.reserved = unbooked.filter(e => e.pendKey);                        // réservations détaillées par la banque
+    const unbooked = state.expenses.filter(e => !e.bankId && !e.income && !e.transfer && e.amount > 0 && e.date >= P.start).sort((a, b) => b.date.localeCompare(a.date));
+    r.reserved = unbooked.filter(e => e.pendKey && !e.planned);          // réservations détaillées par la banque
     r.waiting = unbooked.filter(e => !e.pendKey && e.source === 'apple-pay'); // payé, pas encore signalé par la banque
     r.reservedSum = -r.reserved.reduce((a, e) => a + e.amount, 0);
     const avail = accts.every(b => b.available !== null) ? accts.reduce((a, b) => a + b.available, 0) : null;
@@ -887,6 +998,7 @@ function releveHTML() {
     const e = state.expenses.find(x => x.bankId === t.id);
     if (!e) return '<span class="tag">hors budgets</span>';
     if (e.income) return '<span class="tag ok">revenu</span>';
+    if (e.transfer) return `<span class="tag">${e.transfer === 'interne' ? '⇄ entre tes comptes' : '🏦 épargne / virement'}</span>`;
     const b = budgetById(e.budgetId);
     return `<span class="tag">${b ? esc(b.emoji + ' ' + b.name) : '—'}${e.credit ? ' ↩︎' : ''}${e.review ? ' · à vérifier' : ''}</span>`;
   };
@@ -913,12 +1025,133 @@ function releveHTML() {
     ${r.current && r.waiting.length ? `<h2>Payé · pas encore visible à la banque</h2><div class="card">${r.waiting.map(e => `
       <div class="row" data-a="open-exp" data-id="${e.id}"><div class="grow"><div class="t">${esc(e.merchant || 'Paiement')}</div>
         <div class="muted">${f(e.date)} · Apple Pay</div></div><b class="num">−${eur(e.amount)}</b></div>`).join('')}</div>` : ''}
+    ${r.current && (state.bank.status?.pending || []).some(t => tracked(t.account) && t.date > localISO()) ? `<h2>Ordres programmés · à venir</h2><div class="card">${state.bank.status.pending
+      .filter(t => tracked(t.account) && t.date > localISO()).sort((a, b) => a.date.localeCompare(b.date)).map(t => `
+      <div class="row"><div class="grow"><div class="t">${esc(bankName(t))}</div><div class="muted">${f(t.date)} · pas encore débité</div></div>
+        <b class="num">${sg(t.amount)}</b></div>`).join('')}</div>` : ''}
+    ${(() => { const F = forecast(); if (!F) return ''; return `<h2>Prévision jusqu'au prochain salaire</h2>
+      <div class="card releve">
+        ${line('Disponible aujourd\'hui', eur(F.available), true)}
+        ${F.incomes.map(x => line(`+ ${esc(x.name)} (attendu ~${f(x.date)})`, sg(x.amount))).join('')}
+        ${F.planned.length ? line(`− Ordres programmés (${F.planned.length})`, sg(-F.pl)) : ''}
+        ${F.budgets.map(x => line(`− Reste du budget ${esc(x.b.emoji + ' ' + x.b.name)}`, sg(-x.left))).join('')}
+        ${line('Solde prévu avant le prochain salaire', eur(F.end), true)}
+        <p class="hint">Revenus attendus : ta liste dans ⚙️ → « Revenus attendus chaque mois », moins ceux déjà reçus. Les budgets sont supposés dépensés en entier : si tu dépenses moins, le solde final sera plus élevé.</p>
+      </div>`; })()}
     <h2>Mouvements comptabilisés (${r.moves.length})</h2>
     <div class="card">${r.moves.length ? r.moves.map(t => { const e = state.expenses.find(x => x.bankId === t.id); return `
       <div class="row" ${e ? `data-a="open-exp" data-id="${e.id}"` : ''}><div class="grow"><div class="t">${esc(e?.merchant || bankName(t))}</div>
         <div class="muted">${f(t.date)} · ${tag(t)}</div></div>
         <b class="num" ${t.amount > 0 ? 'style="color:var(--ok)"' : ''}>${sg(t.amount)}</b></div>`; }).join('') : '<div class="empty">Aucun mouvement.</div>'}</div>
   </main>`;
+}
+
+/* ---------- partage en consultation (dépôt budget-inbox, fichier data/partage.json) ---------- */
+function snapshot() {
+  const cutoff = addDays(localISO(), -400), st = state.settings;
+  return {v: 1, budgets: state.budgets, recurring: state.recurring,
+    expenses: state.expenses.filter(e => e.date >= cutoff),
+    bank: {since: state.bank.since, status: state.bank.status, raw: state.bank.raw || []},
+    settings: {period: st.period, salaryPayer: st.salaryPayer, salaryDay: st.salaryDay, bankExcluded: st.bankExcluded, incomes: st.incomes}};
+}
+const strHash = str => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return String(h); };
+function b64utf8(str) {
+  const bytes = new TextEncoder().encode(str); let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function scheduleShare() {
+  if (VIEW || !state.settings.share || !state.settings.ghRepo || !state.settings.ghToken) return;
+  clearTimeout(shareTimer);
+  shareTimer = setTimeout(() => publishShare().catch(err => console.warn(err)), 6000);
+}
+async function publishShare(force = false) {
+  const snap = snapshot(), body = JSON.stringify(snap), h = strHash(body);
+  if (!force && h === shareHash) return false;
+  const path = '/contents/data/partage.json';
+  const content = b64utf8(JSON.stringify({...snap, updated: new Date().toISOString()}));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const g = await ghFetch(path);
+    const sha = g.ok ? (await g.json()).sha : undefined;
+    const r = await ghFetch(path, {method: 'PUT', body: JSON.stringify({message: 'partage : mise à jour', content, ...(sha ? {sha} : {})})});
+    if (r.ok) { shareHash = h; state.settings.shareAt = new Date().toISOString(); localStorage.setItem(STORE, JSON.stringify(state)); return true; }
+    if (r.status === 403 || r.status === 404) throw new Error('Pour partager, ton jeton GitHub doit avoir « Contents : Read and write ».');
+    if (r.status !== 409 && r.status !== 422) throw new Error(`Publication impossible (GitHub ${r.status}).`);
+    await sleep(1500); // le robot a modifié le dépôt entre-temps : on réessaie
+  }
+  throw new Error('Publication impossible : réessaie dans un instant.');
+}
+const shareCode = () => 'BF1-' + btoa(JSON.stringify({r: state.settings.ghRepo, t: state.settings.shareToken}));
+function parseShareCode(code) {
+  try {
+    const j = JSON.parse(atob(String(code).trim().replace(/^BF1-/, '')));
+    if (j.r && j.t) return {repo: j.r, token: j.t};
+  } catch (e) {}
+  return null;
+}
+function applySnapshot(snap) {
+  const d = defaults();
+  state = {budgets: snap.budgets || [], expenses: snap.expenses || [], recurring: snap.recurring || [],
+    bank: {...d.bank, ...(snap.bank || {})}, settings: {...d.settings, ...(snap.settings || {})}, sharedAt: snap.updated};
+  ver++; followCurrent = true;
+}
+let viewerLoading = false;
+async function fetchShare(manual = false, cfg = VIEW) {
+  if (!cfg || viewerLoading) return false;
+  viewerLoading = true;
+  try {
+    const r = await fetch(`${GH_API}/repos/${cfg.repo}/contents/data/partage.json`, {cache: 'no-store',
+      headers: {Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github.raw+json'}});
+    if (r.status === 401) throw new Error('Code de partage expiré ou révoqué : demande-en un nouveau.');
+    if (r.status === 404) throw new Error('Aucun budget partagé trouvé : le partage n\'est pas encore activé sur le téléphone principal.');
+    if (!r.ok) throw new Error(`Erreur GitHub (${r.status}).`);
+    const snap = await r.json();
+    if (cfg === VIEW) { localStorage.setItem(SNAP_KEY, JSON.stringify(snap)); applySnapshot(snap); render(); if (manual) toast('Budget à jour ✓'); }
+    return snap;
+  } catch (err) {
+    if (manual || cfg !== VIEW) toast(err.message); else console.warn(err);
+    return false;
+  } finally { viewerLoading = false; }
+}
+async function joinShare(code) {
+  const cfg = parseShareCode(code);
+  if (!cfg) return toast('Code de partage invalide.');
+  loading(true, 'Connexion au budget partagé…');
+  const snap = await fetchShare(true, cfg);
+  loading(false);
+  if (!snap) return;
+  VIEW = cfg;
+  localStorage.setItem(VIEW_KEY, JSON.stringify(cfg));
+  localStorage.setItem(SNAP_KEY, JSON.stringify(snap));
+  applySnapshot(snap); view = {name: 'home'}; render(); scrollTo(0, 0);
+  toast('Budget partagé connecté ✓');
+}
+function leaveShare() {
+  if (!confirm('Quitter le mode consultation sur ce téléphone ?')) return;
+  localStorage.removeItem(VIEW_KEY); localStorage.removeItem(SNAP_KEY);
+  VIEW = null; state = load(); ver++; followCurrent = true; view = {name: 'home'}; render();
+}
+function shareSettingsHTML() {
+  const s = state.settings, on = s.share;
+  return `<h2>Partage en consultation</h2>
+    <div class="card">
+      <label class="check"><input type="checkbox" data-a="share-toggle" ${on ? 'checked' : ''}> Publier mon budget pour un autre téléphone</label>
+      ${on ? `<p class="hint">${s.shareAt ? 'Dernière publication : ' + new Date(s.shareAt).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : 'Pas encore publié.'} Mise à jour automatique à chaque changement.</p>
+        <label for="stok">Jeton « lecture seule » du téléphone partagé</label>
+        <input id="stok" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(s.shareToken)}">
+        <button class="btn soft" data-a="share-code">🔑 Créer le code de partage</button>
+        ${s.shareToken ? `<label>Code à envoyer</label><input id="scode" readonly value="${esc(shareCode())}">
+          <button class="btn" data-a="share-copy">📋 Copier le code</button>
+          <p class="hint">Sur l'autre téléphone : installer l'app, puis ⚙️ → « Consulter un budget partagé » → coller le code. Envoie-le par un canal privé.</p>` : ''}` : ''}
+    </div>`;
+}
+function viewerSettingsHTML() {
+  return `<header><button class="icon-btn" data-a="back" aria-label="Retour">←</button><h1>Réglages</h1><span style="width:40px"></span></header>
+  <main><h2>Mode consultation</h2>
+    <div class="card"><p style="margin-top:0">👁 Tu consultes le budget partagé par le téléphone principal. Les modifications se font sur ce téléphone-là.</p>
+      <p class="hint">${state.sharedAt ? 'Dernière mise à jour : ' + new Date(state.sharedAt).toLocaleString('fr-BE', {day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'}) : ''}</p>
+      <button class="btn primary" data-a="sync">🔄 Actualiser</button>
+      <button class="btn danger" data-a="share-leave">Quitter le mode consultation</button></div></main>`;
 }
 
 let bankRefreshing = false;
@@ -957,6 +1190,7 @@ async function syncBank(manual = false) {
       state.bank.raw = list.filter(t => t && t.id && t.date >= cutoff)
         .map(({id, date, amount, party, label, account}) => ({id, date, amount, party, label: String(label || '').slice(0, 80), account}));
       added = importBank(list);
+      fixTransfers(list);
       added.push(...syncReserved(st.pending));
       await aiClassify(added);
     }
@@ -1122,6 +1356,10 @@ document.addEventListener('click', ev => {
   if (!el) return;
   const a = el.dataset.a, id = el.dataset.id;
   if (a === 'backdrop') { if (ev.target === el) closeSheet(); return; }
+  const READONLY = ['fab', 'assign', 'del-rv', 'scan-cam', 'scan-file', 'del-exp', 'add-budget', 'edit-budget', 'del-budget',
+    'add-rec', 'edit-rec', 'del-rec', 'inc-add', 'inc-sugg', 'inc-del', 'export', 'import', 'reset', 'bank-connect', 'bank-code', 'bank-paste', 'acct-toggle'];
+  if (VIEW && READONLY.includes(a)) { ev.preventDefault(); toast('Mode consultation : les modifications se font sur le téléphone principal.'); return; }
+  if (VIEW && a === 'sync') { fetchShare(true); return; }
   switch (a) {
     case 'settings': view = {name: 'settings'}; render(); scrollTo(0, 0); break;
     case 'back': view = {name: 'home'}; render(); break;
@@ -1171,13 +1409,30 @@ document.addEventListener('click', ev => {
     case 'assign': {
       const e = state.expenses.find(x => x.id === id);
       if (!e) break;
-      if (el.dataset.b === '__income') { e.income = true; e.budgetId = null; e.amount = Math.abs(e.amount); }
-      else { e.budgetId = el.dataset.b; e.income = false; if (e.credit) e.amount = -Math.abs(e.amount); }
+      if (el.dataset.b === '__transfer') { e.transfer = 'epargne'; e.income = false; e.budgetId = null; }
+      else if (el.dataset.b === '__income') { e.income = true; e.transfer = false; e.budgetId = null; e.amount = Math.abs(e.amount); }
+      else { e.budgetId = el.dataset.b; e.income = false; e.transfer = false; if (e.credit) e.amount = -Math.abs(e.amount); }
       e.review = false; save(); render();
       break;
     }
     case 'open-income': view = {name: 'income'}; render(); scrollTo(0, 0); break;
     case 'open-releve': view = {name: 'releve'}; render(); scrollTo(0, 0); break;
+    case 'share-toggle':
+      state.settings.share = el.checked; save(); render();
+      if (el.checked) publishShare(true).then(() => { render(); toast('Budget publié ✓'); })
+        .catch(err => { state.settings.share = false; save(); render(); toast(err.message); });
+      break;
+    case 'share-code': {
+      const t = ($('#stok')?.value || '').trim();
+      if (!/^github_pat_|^ghp_/.test(t)) { toast('Colle d\'abord le jeton lecture seule (github_pat_…).'); break; }
+      state.settings.shareToken = t; save(); render();
+      break;
+    }
+    case 'share-copy':
+      navigator.clipboard?.writeText($('#scode').value).then(() => toast('Code copié ✓')).catch(() => { $('#scode').select(); toast('Sélectionné : copie-le.'); });
+      break;
+    case 'share-join': joinShare($('#jcode')?.value); break;
+    case 'share-leave': leaveShare(); break;
     case 'bank-connect': bankConnect(); break;
     case 'bank-code': bankSendCode($('#bc')?.value); break;
     case 'bank-paste':
@@ -1188,6 +1443,16 @@ document.addEventListener('click', ev => {
       break;
     case 'del-rv':
       state.expenses = state.expenses.filter(e => e.id !== id); save(); render(); toast('Paiement ignoré.');
+      break;
+    case 'inc-add': {
+      const name = ($('#incN').value || '').trim(), amount = num($('#incA').value), day = Math.min(31, Math.max(1, parseInt($('#incD').value, 10) || 1));
+      if (!name || !(amount > 0)) { toast('Indique un nom et un montant.'); break; }
+      (state.settings.incomes = state.settings.incomes || []).push({id: uid(), name, amount, day}); save(); render(); toast('Revenu attendu ajouté ✓');
+      break;
+    }
+    case 'inc-sugg': { const x = suggestIncomes()[+el.dataset.n]; if (x) { state.settings.incomes.push({id: uid(), ...x}); save(); render(); } break; }
+    case 'inc-del':
+      if (confirm('Supprimer ce revenu attendu ?')) { state.settings.incomes = state.settings.incomes.filter(i => i.id !== id); save(); render(); }
       break;
     case 'add-rec': if (!state.budgets.length) { toast('Crée d\'abord un budget.'); break; } openRecurring({active: true}); break;
     case 'edit-rec': openRecurring(state.recurring.find(r => r.id === id)); break;
@@ -1208,16 +1473,18 @@ document.addEventListener('click', ev => {
 
 document.addEventListener('submit', ev => {
   ev.preventDefault();
+  if (VIEW) { toast('Mode consultation : les modifications se font sur le téléphone principal.'); return; }
   const f = ev.target, d = Object.fromEntries(new FormData(f));
   if (f.id === 'expForm') {
     const amount = num(d.amount);
     if (!(amount > 0)) return toast('Montant invalide.');
-    const data = {amount, date: d.date, budgetId: d.budgetId, merchant: d.merchant.trim(), note: d.note.trim(), review: false};
+    const data = {amount, date: d.date, budgetId: d.budgetId, merchant: d.merchant.trim(), note: d.note.trim(), review: false, transfer: false};
+    if (d.budgetId === '__transfer') Object.assign(data, {transfer: 'epargne', budgetId: null, income: false});
     const old = f.dataset.id && state.expenses.find(e => e.id === f.dataset.id);
-    if (old?.credit) {
+    if (old?.credit && !data.transfer) {
       data.income = d.budgetId === '__income';
       if (data.income) data.budgetId = null; else data.amount = -amount;
-    }
+    } else if (old?.credit) data.amount = -amount;
     if (old) Object.assign(old, data);
     else {
       const exp = {id: uid(), created: Date.now(), source: 'manuel', ...data};
@@ -1295,8 +1562,13 @@ $('#importIn').addEventListener('change', async e => {
 });
 
 /* ---------- démarrage ---------- */
-applyRecurring();
+if (VIEW) {
+  try { const snap = JSON.parse(localStorage.getItem(SNAP_KEY)); if (snap) applySnapshot(snap); } catch (e) {}
+}
+if (!VIEW) applyRecurring();
 render();
+if (VIEW) fetchShare();
+else {
 (() => {
   const q = new URLSearchParams(location.search);
   if (!q.has('code') && !q.has('error')) return;
@@ -1307,7 +1579,13 @@ render();
 })();
 syncInbox();
 syncBank();
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { if (applyRecurring()) render(); syncInbox(); syncBank(); } });
+scheduleShare();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (VIEW) { fetchShare(); return; }
+  if (applyRecurring()) render(); syncInbox(); syncBank();
+});
 if (navigator.storage?.persist) navigator.storage.persist();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 </script>
