@@ -103,6 +103,12 @@ label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appea
 .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-top:6px}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
 .env{cursor:pointer}.small{font-size:13px;font-weight:400}
+.day{margin-top:10px;font-size:13px}
+.day-top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:var(--muted)}
+.day-top b{color:var(--text)}
+.mini{height:6px;border-radius:99px;background:var(--line);margin-top:5px;overflow:hidden}
+.mini div{height:100%;border-radius:99px;transition:width .6s}
+.daycard .day{margin-top:6px}
 .thumb{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px}
 </style>
 </head>
@@ -325,6 +331,25 @@ function pace() {
 }
 
 /* ---------- rendu ---------- */
+/* ---------- rythme journalier : moyenne dépensée par jour vs maximum possible jusqu'à la fin de la période ---------- */
+const FIXED_RE = /fixe|provision|[ée]pargne|saving|loyer|cr[ée]dit|assurance|engie|[ée]nergie|abonnement|pr[êe]t/i;
+const dailyOn = b => b.daily ?? !(FIXED_RE.test(b.name) || state.recurring.some(r => r.active && r.budgetId === b.id));
+function dayStats(amount, sp) {
+  const P = per(), today = localISO();
+  if (!isCurrent()) { const days = Math.max(1, daysBetween(P.start, P.end)); return {past: true, avg: sp / days}; }
+  const elapsed = Math.max(1, daysBetween(P.start, today) + 1), remaining = Math.max(1, daysBetween(today, P.end));
+  return {avg: sp / elapsed, max: (amount - sp) / remaining, remaining, end: addDays(P.end, -1)};
+}
+function dayHTML(d, label = '') {
+  const f = x => eur(Math.max(0, x)).replace(/\s?€/, ' €');
+  if (d.past) return `<div class="day muted num">${label}Ø ${f(d.avg)} par jour sur la période</div>`;
+  if (d.max <= 0) return `<div class="day num"><div class="day-top"><span>${label}Ø ${f(d.avg)}/jour</span><b style="color:var(--danger)">plus rien jusqu'au ${shortDate(d.end)}</b></div>
+    <div class="mini"><div style="width:100%;background:var(--danger)"></div></div></div>`;
+  const ratio = d.avg / d.max, col = ratio <= 1 ? 'var(--ok)' : ratio <= 1.1 ? 'var(--warn)' : 'var(--danger)';
+  return `<div class="day num"><div class="day-top"><span>${label}Ø <b>${f(d.avg)}</b>/jour dépensés</span><span>max <b style="color:${col}">${f(d.max)}</b>/jour jusqu'au ${shortDate(d.end)}</span></div>
+    <div class="mini" title="moyenne actuelle / maximum possible"><div style="width:${Math.min(1, ratio) * 100}%;background:${col}"></div></div></div>`;
+}
+
 function budgetCard(b, clickable = true) {
   const sp = spent(b.id), pct = b.amount > 0 ? sp / b.amount : 0, p = pace();
   const left = b.amount - sp, up = upcoming(b.id);
@@ -343,6 +368,7 @@ function budgetCard(b, clickable = true) {
       <span class="left num">${left >= 0 ? `Reste ${eur(left)}` : `Dépassement de ${eur(-left)}`}</span>
       <span class="num">${Math.round(pct * 100)} %</span>
     </div>
+    ${dailyOn(b) && b.amount > 0 ? dayHTML(dayStats(b.amount, sp)) : ''}
     ${up > 0 ? `<div class="muted up-line num">🔁 ${eur(up)} encore à prélever ${salaryMode() ? 'd\'ici le prochain salaire' : 'ce mois'}${left - up < 0 ? ` · <b style="color:var(--danger)">dépassement prévu de ${eur(up - left)}</b>` : ` · reste réel ${eur(left - up)}`}</div>` : ''}
   </div>`;
 }
@@ -437,6 +463,9 @@ function homeHTML() {
         <div class="muted num">sur ${eur(tot)} · ${tot - sp >= 0 ? 'reste ' + eur(tot - sp) : 'dépassé de ' + eur(sp - tot)}</div>
       </div>
     </div>
+    ${(() => { const dl = state.budgets.filter(b => dailyOn(b) && b.amount > 0); if (!dl.length) return '';
+      const a = dl.reduce((x, b) => x + b.amount, 0), s2 = dl.reduce((x, b) => x + spent(b.id), 0);
+      return `<div class="card daycard"><div class="muted small">Rythme journalier · ${dl.map(b => esc(b.emoji)).join(' ')} (budgets suivis au jour)</div>${dayHTML(dayStats(a, s2))}</div>`; })()}
     ${bankHTML()}
     ${retraiteCardHTML()}
     ${reviewHTML()}
@@ -629,6 +658,8 @@ function openBudget(b) {
         <div><label>Emoji</label><input name="emoji" maxlength="4" value="${esc(b.emoji || '💶')}"></div>
       </div>
       <label>Couleur</label><input name="color" type="color" value="${b.color || '#0f766e'}">
+      <label class="check"><input type="checkbox" name="daily" ${(isNew ? true : dailyOn(b)) ? 'checked' : ''}> Suivi par jour (moyenne et maximum quotidiens)</label>
+      <p class="hint">À décocher pour les budgets faits de gros prélèvements (dépenses fixes, épargne…).</p>
       <button class="btn primary">Enregistrer</button>
       ${isNew ? '' : `<button type="button" class="btn danger" data-a="del-budget" data-id="${b.id}">Supprimer ce budget</button>`}
     </form>`);
@@ -1704,7 +1735,7 @@ document.addEventListener('submit', ev => {
   if (f.id === 'budgetForm') {
     const amount = num(d.amount);
     if (!(amount >= 0)) return toast('Montant invalide.');
-    const data = {name: d.name.trim(), amount, emoji: d.emoji.trim() || '💶', color: d.color};
+    const data = {name: d.name.trim(), amount, emoji: d.emoji.trim() || '💶', color: d.color, daily: !!d.daily};
     if (f.dataset.id) Object.assign(budgetById(f.dataset.id), data);
     else state.budgets.push({id: uid(), ...data});
     save(); closeSheet(); render(); toast('Budget enregistré ✓');
