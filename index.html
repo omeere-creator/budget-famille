@@ -889,6 +889,10 @@ function syncReserved(pending) {
   const B = state.bank;
   const P = (pending || []).filter(t => t && t.amount < 0 && t.date && tracked(t.account) && t.date >= (B.since || '0'));
   const keys = new Set(P.map(pendKeyOf));
+  // (re)marque « programmé » toute ligne liée à une opération bancaire datée dans le futur,
+  // y compris celles créées par une version précédente de l'app
+  const byKey = new Map(P.map(t => [pendKeyOf(t), t])), today = localISO();
+  state.expenses.forEach(e => { const t = e.pendKey && !e.bankId && byKey.get(e.pendKey); if (t) e.planned = t.date > today; });
   state.expenses = state.expenses.filter(e => !(e.source === 'reserve' && !e.bankId && !keys.has(e.pendKey)));
   state.expenses.forEach(e => { if (e.pendKey && !e.bankId && !keys.has(e.pendKey)) delete e.pendKey; });
   const have = new Set(state.expenses.map(e => e.pendKey).filter(Boolean));
@@ -898,7 +902,7 @@ function syncReserved(pending) {
     if (have.has(k)) continue;
     // déjà connue (Apple Pay, ticket, encodage) : on la marque simplement comme réservée
     const m = state.expenses.find(e => !e.bankId && !e.pendKey && !e.income && Math.abs(e.amount + t.amount) < 0.01 && daysBetween(e.date, t.date) <= 4);
-    if (m) { m.pendKey = k; m.account = t.account; have.add(k); continue; }
+    if (m) { m.pendKey = k; m.account = t.account; m.planned = t.date > localISO(); have.add(k); continue; }
     const name = bankName(t), key = normMerchant(name), g = guessTarget(key);
     // date future = ordre permanent programmé : il compte dans son budget (engagé) mais n'est pas encore débité
     const e = {id: uid(), created: Date.now(), source: 'reserve', pendKey: k, planned: t.date > localISO(), account: t.account, date: t.date, amount: -t.amount,
