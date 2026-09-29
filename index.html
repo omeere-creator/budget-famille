@@ -169,7 +169,8 @@ function defaults() {
     expenses: [],
     recurring: [],
     bank: {since: null, seen: [], status: {}, pending: null},
-    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: [], share: false, shareToken: '', shareAt: null, incomes: [], retraite: defaultRetraite()}
+    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: [], share: false, shareToken: '', shareAt: null, incomes: [], retraite: defaultRetraite(),
+      backup: true, backupAt: null, tokenExpiry: '', notify: {on: false, topic: '', big: true, minBig: 150, budget: true}}
   };
 }
 function load() {
@@ -194,6 +195,7 @@ function save() {
   if (VIEW) return; // en consultation, rien n'est enregistré ni publié
   localStorage.setItem(STORE, JSON.stringify(state));
   scheduleShare();
+  scheduleBackup();
 }
 
 let state = load();
@@ -495,7 +497,7 @@ function settingsHTML() {
   const s = state.settings;
   return `<header><button class="icon-btn" data-a="back" aria-label="Retour">←</button><h1>Réglages</h1><span style="width:40px"></span></header>
   <main>
-    ${state.settings.ghRepo ? shareSettingsHTML() : ''}
+    ${state.settings.ghRepo ? backupSettingsHTML() + shareSettingsHTML() : ''}
     <h2>Consulter un budget partagé</h2>
     <div class="card"><p class="hint" style="margin-top:0">Sur le téléphone d'un membre de la famille : colle le code de partage reçu.</p>
       <input id="jcode" autocomplete="off" autocapitalize="off" placeholder="BF1-…">
@@ -541,6 +543,8 @@ function settingsHTML() {
         <p class="hint">Le raccourci iOS dépose chaque paiement dans ce dépôt privé ; l'app les récupère à chaque ouverture. Mise en place : voir le README.</p>
         ${s.ghRepo && s.ghToken ? '<button type="button" class="btn soft" data-a="sync">🔄 Récupérer les paiements maintenant</button>' : ''}
       </div>
+      <label for="tokExp">Date d'expiration de ce jeton GitHub (pour être prévenu)</label>
+        <input id="tokExp" name="tokenExpiry" type="date" value="${esc(state.settings.tokenExpiry || '')}">
       <button class="btn primary">Enregistrer les réglages</button>
     </form>
 
@@ -1255,6 +1259,74 @@ function scheduleShare() {
   clearTimeout(shareTimer);
   shareTimer = setTimeout(() => publishShare().catch(err => console.warn(err)), 6000);
 }
+async function putRepoFile(path, obj, message) {
+  const content = b64utf8(JSON.stringify(obj));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const g = await ghFetch(`/contents/${path}`);
+    const sha = g.ok ? (await g.json()).sha : undefined;
+    const r = await ghFetch(`/contents/${path}`, {method: 'PUT', body: JSON.stringify({message, content, ...(sha ? {sha} : {})})});
+    if (r.ok) return true;
+    if (r.status === 403 || r.status === 404) throw new Error('Ton jeton GitHub doit avoir « Contents : Read and write » (GitHub → Settings → Developer settings → ton jeton → Edit).');
+    if (r.status !== 409 && r.status !== 422) throw new Error(`Enregistrement impossible (GitHub ${r.status}).`);
+    await sleep(1500); // le robot a modifié le dépôt entre-temps : on réessaie
+  }
+  throw new Error('Enregistrement impossible : réessaie dans un instant.');
+}
+/* ---------- sauvegarde automatique (data/sauvegarde.json, sans aucune clé ni jeton) ---------- */
+var backupTimer = null, backupHash = '';
+function backupState() {
+  const st = JSON.parse(JSON.stringify(state));
+  Object.assign(st.settings, {apiKey: '', ghToken: '', shareToken: ''});
+  return st;
+}
+function scheduleBackup() {
+  if (VIEW || state.settings.backup === false || !state.settings.ghRepo || !state.settings.ghToken) return;
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => runBackup().catch(err => console.warn(err)), 10000);
+}
+async function runBackup(force = false) {
+  const st = backupState(), h = strHash(JSON.stringify(st));
+  if (!force && h === backupHash) return false;
+  await putRepoFile('data/sauvegarde.json', {v: 1, updated: new Date().toISOString(), state: st}, 'sauvegarde de l\'app');
+  backupHash = h; state.settings.backupAt = new Date().toISOString(); localStorage.setItem(STORE, JSON.stringify(state));
+  return true;
+}
+async function restoreBackup(auto = false) {
+  const b = await ghFile('data/sauvegarde.json');
+  if (!b?.state) { if (!auto) toast('Aucune sauvegarde trouvée dans ton dépôt.'); return false; }
+  const n = (b.state.expenses || []).length, when = new Date(b.updated).toLocaleString('fr-BE', {day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'});
+  if (!confirm(`Restaurer la sauvegarde du ${when} (${(b.state.budgets || []).length} budgets, ${n} mouvements) ? Les données actuelles de ce téléphone seront remplacées.`)) return false;
+  const keep = {apiKey: state.settings.apiKey, ghRepo: state.settings.ghRepo, ghToken: state.settings.ghToken, shareToken: state.settings.shareToken};
+  const d = defaults();
+  state = {...d, ...b.state, bank: {...d.bank, ...(b.state.bank || {})}, settings: {...d.settings, ...(b.state.settings || {}), ...keep}};
+  backupHash = strHash(JSON.stringify(backupState()));
+  ver++; followCurrent = true; localStorage.setItem(STORE, JSON.stringify(state));
+  view = {name: 'home'}; render(); toast('Sauvegarde restaurée ✓');
+  return true;
+}
+function backupSettingsHTML() {
+  const s = state.settings, N = s.notify || {}, when = x => x ? new Date(x).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : 'jamais';
+  return `<h2>Sauvegarde</h2>
+    <div class="card">
+      <label class="check"><input type="checkbox" data-a="bk-toggle" ${s.backup !== false ? 'checked' : ''}> Sauvegarder automatiquement dans mon dépôt privé</label>
+      <p class="hint">Dernière sauvegarde : ${when(s.backupAt)}. Tout y est (budgets, classements, revenus attendus, retraite), sauf tes clés et jetons.</p>
+      <button class="btn soft" data-a="bk-now">💾 Sauvegarder maintenant</button>
+      <button class="btn" data-a="bk-restore">↩️ Restaurer la sauvegarde sur ce téléphone</button>
+    </div>
+    <h2>Notifications</h2>
+    <div class="card">
+      <label class="check"><input type="checkbox" data-a="nt-toggle" ${N.on ? 'checked' : ''}> Recevoir des notifications sur mon téléphone</label>
+      ${N.on ? `
+        <label>Ton canal privé (à saisir dans l'app ntfy)</label>
+        <div class="grid2" style="grid-template-columns:1fr auto"><input id="ntTopic" readonly value="${esc(N.topic)}"><button class="btn soft" style="margin:0;width:auto" data-a="nt-copy">Copier</button></div>
+        <label class="check"><input type="checkbox" data-a="nt-opt" data-k="big" ${N.big !== false ? 'checked' : ''}> Débit inhabituel (plus de 2× l'habitude pour ce commerçant)</label>
+        <div class="grid2" style="grid-template-columns:1fr 110px;align-items:center;margin-top:6px"><span class="muted small">à partir de (€)</span><input id="ntMin" data-c="nt-min" inputmode="decimal" value="${N.minBig || 150}"></div>
+        <label class="check"><input type="checkbox" data-a="nt-opt" data-k="budget" ${N.budget !== false ? 'checked' : ''}> Budget suivi au jour qui passe au rouge ou épuisé</label>
+        <p class="hint">Toujours envoyées aussi : salaire reçu, accès bancaire ou jeton GitHub qui expire bientôt. Le robot vérifie toutes les 3 heures.</p>
+        <button class="btn soft" data-a="nt-test">🔔 Envoyer une notification de test</button>` : ''}
+    </div>`;
+}
+
 async function publishShare(force = false) {
   const snap = snapshot(), body = JSON.stringify(snap), h = strHash(body);
   if (!force && h === shareHash) return false;
@@ -1547,7 +1619,7 @@ document.addEventListener('click', ev => {
   const a = el.dataset.a, id = el.dataset.id;
   if (a === 'backdrop') { if (ev.target === el) closeSheet(); return; }
   const READONLY = ['fab', 'assign', 'del-rv', 'scan-cam', 'scan-file', 'del-exp', 'add-budget', 'edit-budget', 'del-budget',
-    'add-rec', 'edit-rec', 'del-rec', 'inc-add', 'inc-sugg', 'inc-del', 'ret-edit', 'ret-add', 'ret-del', 'export', 'import', 'reset', 'bank-connect', 'bank-code', 'bank-paste', 'acct-toggle'];
+    'add-rec', 'edit-rec', 'del-rec', 'inc-add', 'inc-sugg', 'inc-del', 'ret-edit', 'ret-add', 'ret-del', 'bk-toggle', 'bk-now', 'bk-restore', 'nt-toggle', 'nt-opt', 'nt-test', 'export', 'import', 'reset', 'bank-connect', 'bank-code', 'bank-paste', 'acct-toggle'];
   if (VIEW && READONLY.includes(a)) { ev.preventDefault(); toast('Mode consultation : les modifications se font sur le téléphone principal.'); return; }
   if (VIEW && a === 'sync') { fetchShare(true); return; }
   switch (a) {
@@ -1610,6 +1682,26 @@ document.addEventListener('click', ev => {
     case 'open-ret': view = {name: 'retraite'}; render(); scrollTo(0, 0); break;
     case 'ret-edit': openRetEnv(+el.dataset.i); break;
     case 'ret-add': openRetEnv(null); break;
+    case 'bk-toggle': state.settings.backup = el.checked; save(); render(); if (el.checked) runBackup(true).then(() => render()).catch(err => toast(err.message)); break;
+    case 'bk-now': loading(true, 'Sauvegarde…'); runBackup(true).then(() => { loading(false); render(); toast('Sauvegardé ✓'); }).catch(err => { loading(false); toast(err.message); }); break;
+    case 'bk-restore': restoreBackup().catch(err => toast(err.message)); break;
+    case 'nt-toggle': {
+      const N = state.settings.notify = {big: true, minBig: 150, budget: true, ...(state.settings.notify || {}), on: el.checked};
+      if (el.checked && !N.topic) N.topic = 'budget-' + Array.from(crypto.getRandomValues(new Uint8Array(12)), x => 'abcdefghijkmnpqrstuvwxyz23456789'[x % 32]).join('');
+      N.appUrl = location.origin + location.pathname;
+      save(); render(); runBackup(true).catch(err => toast(err.message));
+      break;
+    }
+    case 'nt-opt': state.settings.notify[el.dataset.k] = el.checked; save(); break;
+    case 'nt-copy':
+      navigator.clipboard?.writeText($('#ntTopic').value).then(() => toast('Canal copié ✓')).catch(() => { $('#ntTopic').select(); toast('Sélectionné : copie-le.'); });
+      break;
+    case 'nt-test':
+      loading(true, 'Envoi du test… (≈ 1 min)');
+      runBackup(true).then(() => ghIssue('banque test', 'Notification de test demandée depuis l\'app.'))
+        .then(() => { loading(false); toast('Demande envoyée : la notification arrive dans 1 à 2 minutes.'); })
+        .catch(err => { loading(false); toast(err.message); });
+      break;
     case 'ret-del':
       R().env.splice(+el.dataset.i, 1); save(); closeSheet(); render(); toast('Enveloppe supprimée.');
       break;
@@ -1744,12 +1836,16 @@ document.addEventListener('submit', ev => {
     state.settings.apiKey = d.apiKey.trim(); state.settings.model = d.model;
     state.settings.ghRepo = d.ghRepo.trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$|\/+$/g, '');
     state.settings.ghToken = d.ghToken.trim();
+    state.settings.tokenExpiry = d.tokenExpiry || '';
     state.settings.period = d.period;
     state.settings.salaryPayer = d.salaryPayer.trim();
     state.settings.salaryDay = Math.min(31, Math.max(1, parseInt(d.salaryDay, 10) || 25));
     followCurrent = true;
     save(); render(); toast('Réglages enregistrés ✓');
-    if (state.settings.ghRepo && state.settings.ghToken) { syncInbox(true); syncBank(); }
+    if (state.settings.ghRepo && state.settings.ghToken) {
+      // téléphone neuf : propose d'abord de récupérer la sauvegarde
+      (state.expenses.length ? Promise.resolve() : restoreBackup(true).catch(() => {})).then(() => { syncInbox(true); syncBank(); });
+    }
   }
 });
 
@@ -1770,6 +1866,10 @@ $('#importIn').addEventListener('change', async e => {
       settings: {...defaults().settings, ...(s.settings || {}), apiKey, ghToken, ghRepo: ghRepo || s.settings?.ghRepo || ''}};
     save(); render(); toast('Sauvegarde restaurée ✓');
   } catch (err) { toast('Fichier de sauvegarde invalide.'); }
+});
+
+document.addEventListener('change', ev => {
+  if (ev.target.dataset?.c === 'nt-min' && !VIEW) { const v = num(ev.target.value); if (v > 0) { state.settings.notify.minBig = v; save(); toast('Seuil enregistré ✓'); } }
 });
 
 /* ---------- démarrage ---------- */

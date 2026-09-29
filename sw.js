@@ -1,5 +1,5 @@
 // Service worker : l'app fonctionne hors ligne, et récupère la dernière version quand le réseau est là.
-const CACHE = 'budget-famille-v16';
+const CACHE = 'budget-famille-v17';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
