@@ -96,6 +96,13 @@ label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appea
 .releve .rl.strong:first-child{border-top:0;margin-top:0;padding-top:0}
 .tag{font-size:12px;padding:1px 7px;border-radius:99px;background:var(--line);color:var(--text);white-space:nowrap}
 .tag.ok{background:#dcfce7;color:#166534}.tag.warn{background:#fef3c7;color:#92400e}
+.ret-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill-s{font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px}
+.pill-s.ok{background:#dcfce7;color:#166534}.pill-s.ko{background:#fee2e2;color:#991b1b}
+.retchart{margin-top:12px}.retchart text{fill:var(--muted);font-size:11px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.env{cursor:pointer}.small{font-size:13px;font-weight:400}
 .thumb{width:100%;max-height:180px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px}
 </style>
 </head>
@@ -137,6 +144,15 @@ const monthLabel = m => { const [y, mo] = m.split('-').map(Number); return new D
 const shortDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-BE', {day:'numeric', month:'short'}) : '';
 
 /* ---------- données ---------- */
+function defaultRetraite() {
+  return {age: 44, ageDate: '2026-09-29', stop: 60, legal: 67, need: 2000, infl: 2, rDraw: 3, refund: 1000,
+    env: [
+      {id: 'pp', name: 'Épargne-pension', emoji: '🏛️', monthly: 175, cap: 2100, r: 4.5, tax: 8, keys: 'souscription titres', balance: 0, asOf: '2026-09-29'},
+      {id: 'lt', name: 'Épargne à long terme', emoji: '📜', monthly: 408, cap: 4900, r: 2, tax: 10, keys: '', balance: 0, asOf: '2026-09-29'},
+      {id: 'etf', name: 'ETF monde (IWDA)', emoji: '📈', monthly: 617, cap: 0, r: 6, tax: 0, keys: '', balance: 0, asOf: '2026-09-29', refund: true},
+      {id: 'flow', name: 'Belfius Flow', emoji: '🏦', monthly: 0, cap: 0, r: 3.33, tax: 0, keys: "fond d'urgence", balance: 0, asOf: '2026-09-29', reserve: 13300}
+    ]};
+}
 function defaults() {
   return {
     budgets: [
@@ -147,7 +163,7 @@ function defaults() {
     expenses: [],
     recurring: [],
     bank: {since: null, seen: [], status: {}, pending: null},
-    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: [], share: false, shareToken: '', shareAt: null, incomes: []}
+    settings: {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', period: 'salary', salaryPayer: 'Stellantis', salaryDay: 25, bankExcluded: [], share: false, shareToken: '', shareAt: null, incomes: [], retraite: defaultRetraite()}
   };
 }
 function load() {
@@ -422,6 +438,7 @@ function homeHTML() {
       </div>
     </div>
     ${bankHTML()}
+    ${retraiteCardHTML()}
     ${reviewHTML()}
     <h2>Budgets</h2>
     ${state.budgets.map(b => budgetCard(b)).join('') || '<div class="empty">Aucun budget. Crée-en un dans les réglages ⚙️</div>'}
@@ -550,9 +567,10 @@ function render() {
   if (view.name === 'budget') app.innerHTML = budgetHTML(view.id);
   else if (view.name === 'income') app.innerHTML = incomeHTML();
   else if (view.name === 'releve') app.innerHTML = releveHTML();
+  else if (view.name === 'retraite') app.innerHTML = retraiteHTML();
   else if (view.name === 'settings') app.innerHTML = VIEW ? viewerSettingsHTML() : settingsHTML();
   else app.innerHTML = homeHTML();
-  $('#fab').hidden = view.name === 'settings' || !!VIEW;
+  $('#fab').hidden = view.name === 'settings' || view.name === 'retraite' || !!VIEW;
 }
 
 /* ---------- feuilles (modales) ---------- */
@@ -957,6 +975,143 @@ function forecast() {
   return {P, available, incomes, inc, planned, pl, budgets, left, end: available + inc - pl - left};
 }
 
+/* ---------- retraite : suivi des enveloppes + projection à 60 ans ---------- */
+const eur0 = n => new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', maximumFractionDigits: 0}).format(n || 0);
+const R = () => state.settings.retraite || (state.settings.retraite = defaultRetraite());
+const fold = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function envMoves(env) {
+  const keys = String(env.keys || '').split(',').map(k => fold(k).trim()).filter(Boolean);
+  if (!keys.length) return [];
+  return state.expenses.filter(e => !e.income && e.amount > 0 && !(e.planned && !e.bankId) && e.date <= localISO()
+    && keys.some(k => fold(e.merchant + ' ' + (e.note || '')).includes(k))).sort((a, b) => b.date.localeCompare(a.date));
+}
+function envStats(env) {
+  const moves = envMoves(env), year = localISO().slice(0, 4);
+  const ytd = moves.filter(e => e.date.startsWith(year)).reduce((a, e) => a + e.amount, 0);
+  const since = moves.filter(e => e.date > (env.asOf || '0')).reduce((a, e) => a + e.amount, 0);
+  const m = new Date().getMonth() + 1, start = env.asOf && env.asOf.startsWith(year) ? +env.asOf.slice(5, 7) : 1;
+  const expected = env.monthly * Math.max(1, m - start + 1);
+  return {moves, ytd, value: (+env.balance || 0) + since, expected, last: moves[0]};
+}
+const retAge = () => { const r = R(); return r.age + Math.max(0, (new Date(localISO()) - new Date(r.ageDate || localISO())) / (365.25 * 864e5)); };
+function retProject(o = {}) {
+  const r = {...R(), ...o}, env = o.env || r.env, a0 = retAge();
+  const nAcc = Math.max(0, Math.round((r.stop - a0) * 12)), nDraw = Math.max(0, Math.round((r.legal - Math.max(r.stop, a0)) * 12));
+  const mr = a => Math.pow(1 + a / 100, 1 / 12) - 1, inf = mr(r.infl), rD = mr(r.rDraw);
+  const bal = env.map(e => envStats(e).value), pts = [];
+  const refundIdx = Math.max(0, env.findIndex(e => e.refund));
+  for (let m = 0; m < nAcc; m++) {
+    env.forEach((e, i) => { bal[i] = bal[i] * (1 + mr(e.r)) + (+e.monthly || 0); });
+    if (m % 12 === 11) bal[refundIdx] += +r.refund || 0;
+    if (m % 12 === 0) pts.push({age: a0 + m / 12, parts: bal.slice()});
+  }
+  const capital = bal.reduce((s, b, i) => s + b * (1 - (+env[i].tax || 0) / 100), 0);
+  const needAt = r.need * Math.pow(1 + r.infl / 100, Math.max(0, r.stop - a0));
+  let D = capital, lastsTo = null;
+  for (let m = 0; m < nDraw; m++) {
+    if (m % 12 === 0) pts.push({age: r.stop + m / 12, draw: Math.max(D, 0)});
+    D = D * (1 + rD) - needAt * Math.pow(1 + inf, m);
+    if (D < 0 && lastsTo === null) lastsTo = r.stop + (m + 1) / 12;
+  }
+  pts.push({age: r.legal, draw: Math.max(D, 0)});
+  let need = 0; for (let m = nDraw - 1; m >= 0; m--) need = (need + needAt * Math.pow(1 + inf, m)) / (1 + rD);
+  return {capital, need, needAt, end: D, lastsTo, pts, monthly: env.reduce((s, e) => s + (+e.monthly || 0), 0)};
+}
+const ENV_COLORS = ['#6a8fd6', '#c58a1b', '#1f9d7a', '#8a5cc2', '#d0608a', '#7a8a3a'];
+function retChart(P) {
+  const W = 700, H = 230, L = 52, Rr = 10, T = 10, B = 26, env = R().env;
+  const tot = q => q.parts ? q.parts.reduce((a, b) => a + b, 0) : q.draw;
+  const maxV = Math.max(P.need, ...P.pts.map(tot)) * 1.08 || 1, a0 = P.pts[0]?.age || 44, a1 = P.pts[P.pts.length - 1]?.age || 67;
+  const x = a => L + (a - a0) / Math.max(1, a1 - a0) * (W - L - Rr), y = v => H - B - v / maxV * (H - T - B);
+  const step = maxV > 400000 ? 100000 : 50000; let g = '';
+  for (let v = 0; v <= maxV; v += step) g += `<line x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v / 1000} k</text>`;
+  for (let a = Math.ceil(a0 / 2) * 2; a <= a1; a += 2) g += `<text x="${x(a)}" y="${H - 8}" text-anchor="middle">${a}</text>`;
+  const bw = Math.max(4, (W - L - Rr) / P.pts.length - 4);
+  for (const q of P.pts) {
+    let base = 0; const cx = x(q.age) - bw / 2;
+    const parts = q.parts ? q.parts.map((v, i) => [v, ENV_COLORS[i % ENV_COLORS.length]]) : [[q.draw, 'var(--muted)']];
+    for (const [v, c] of parts) { if (v <= 0) continue; g += `<rect x="${cx}" y="${y(base + v)}" width="${bw}" height="${y(base) - y(base + v)}" fill="${c}" rx="1.5"/>`; base += v; }
+  }
+  g += `<line x1="${L}" x2="${W - Rr}" y1="${y(P.need)}" y2="${y(P.need)}" stroke="var(--warn)" stroke-dasharray="5 4"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" class="retchart" role="img" aria-label="Capital prévu">${g}</svg>
+    <div class="legend">${env.map((e, i) => `<span><i style="background:${ENV_COLORS[i % ENV_COLORS.length]}"></i>${esc(e.name)}</span>`).join('')}<span><i style="background:var(--muted)"></i>Retraits 60-67</span><span><i style="background:var(--warn)"></i>Objectif</span></div>`;
+}
+function retraiteCardHTML() {
+  if (!R().env?.length) return '';
+  const P = retProject(), ok = P.capital >= P.need, r = R();
+  const ytd = r.env.reduce((a, e) => a + envStats(e).ytd, 0);
+  return `<div class="card acct" data-a="open-ret">
+    <div class="muted">🏖️ Retraite à ${r.stop} ans</div>
+    <div class="ret-row"><span class="big">${eur0(Math.round(P.capital / 1000) * 1000)}</span><span class="pill-s ${ok ? 'ok' : 'ko'}">${ok ? 'objectif atteint' : 'en dessous'}</span></div>
+    <div class="muted num">prévus à ${r.stop} ans · objectif ${eur0(Math.round(P.need / 1000) * 1000)} · versé cette année ${eur0(ytd)}</div>
+  </div>`;
+}
+function retraiteHTML() {
+  const r = R(), P = retProject(), ok = P.capital >= P.need, year = localISO().slice(0, 4);
+  const back = '<button class="icon-btn" data-a="back" aria-label="Retour">←</button>';
+  return `<header>${back}<h1>Retraite à ${r.stop} ans</h1><span style="width:40px"></span></header><main>
+    <div class="card">
+      <div class="muted">Capital net prévu à ${r.stop} ans</div>
+      <div class="ret-row"><span class="big">${eur0(P.capital)}</span><span class="pill-s ${ok ? 'ok' : 'ko'}">${ok ? 'objectif atteint' : 'manque ' + eur0(P.need - P.capital)}</span></div>
+      <div class="muted num">Objectif ${eur0(P.need)} : ${eur0(r.need)} par mois d'aujourd'hui (${eur0(P.needAt)} en ${new Date().getFullYear() + Math.round(r.stop - retAge())}) de ${r.stop} à ${r.legal} ans.
+        ${P.end >= 0 ? `Il resterait ${eur0(P.end)} à ${r.legal} ans.` : `Capital épuisé vers ${P.lastsTo.toFixed(1).replace('.', ',')} ans.`}</div>
+      ${retChart(P)}
+    </div>
+
+    <h2>Enveloppes · versements détectés</h2>
+    ${r.env.map((e, i) => { const st = envStats(e), capPct = e.cap ? Math.min(1, st.ytd / e.cap) : 0, late = e.keys && e.monthly > 0 && st.ytd < st.expected * 0.8; return `
+      <div class="card env" data-a="ret-edit" data-i="${i}">
+        <div class="bud-top"><div class="emoji" style="background:${ENV_COLORS[i % ENV_COLORS.length]}22">${esc(e.emoji || '💶')}</div>
+          <div class="bud-name">${esc(e.name)}<div class="muted small">${e.monthly ? eur(e.monthly) + ' / mois prévus' : 'pas de versement prévu'} · ${String(e.r).replace('.', ',')} %/an</div></div>
+          <div class="bud-amt"><b class="num">${eur(st.value)}</b><div class="muted num small">valeur suivie</div></div></div>
+        ${e.cap ? `<div class="bar"><div class="fill" style="width:${capPct * 100}%;background:${ENV_COLORS[i % ENV_COLORS.length]}"></div></div>
+          <div class="bud-foot muted small"><span class="num">${eur(st.ytd)} versés en ${year} sur ${eur(e.cap)} de plafond fiscal</span><span class="num">${Math.round(capPct * 100)} %</span></div>` : ''}
+        ${e.reserve ? `<div class="bar"><div class="fill" style="width:${Math.min(1, st.value / e.reserve) * 100}%;background:${ENV_COLORS[i % ENV_COLORS.length]}"></div></div>
+          <div class="bud-foot muted small"><span class="num">Réserve de sécurité : ${eur(st.value)} sur ${eur(e.reserve)}</span><span class="num">${Math.round(Math.min(1, st.value / e.reserve) * 100)} %</span></div>` : ''}
+        <div class="muted small" style="margin-top:6px">${!e.keys ? '⚙️ Touche pour indiquer comment reconnaître ses versements' : st.last ? `Dernier versement : ${esc(st.last.merchant)} · ${shortDate(st.last.date)} · ${eur(st.last.amount)}` : 'Aucun versement reconnu pour l\'instant'}
+          ${late ? ' · <b style="color:var(--warn)">en retard sur le plan</b>' : ''}</div>
+      </div>`; }).join('')}
+    <button class="btn soft" data-a="ret-add">+ Ajouter une enveloppe</button>
+
+    <h2>Hypothèses du plan</h2>
+    <form class="card" id="retForm">
+      <div class="grid2">
+        <div><label>Âge aujourd'hui</label><input name="age" type="number" value="${Math.floor(retAge())}"></div>
+        <div><label>Arrêt de travail à</label><input name="stop" type="number" value="${r.stop}"></div>
+        <div><label>Pension légale à</label><input name="legal" type="number" value="${r.legal}"></div>
+        <div><label>Revenu voulu (€/mois, valeur actuelle)</label><input name="need" inputmode="decimal" value="${r.need}"></div>
+        <div><label>Inflation (%/an)</label><input name="infl" inputmode="decimal" value="${String(r.infl).replace('.', ',')}"></div>
+        <div><label>Rendement pendant les retraits (%)</label><input name="rDraw" inputmode="decimal" value="${String(r.rDraw).replace('.', ',')}"></div>
+        <div><label>Remboursement d'impôt réinvesti (€/an)</label><input name="refund" inputmode="decimal" value="${r.refund}"></div>
+      </div>
+      <button class="btn primary">Recalculer</button>
+      <p class="hint">Rendements supposés, pas garantis. Taxes à 60 ans appliquées par enveloppe (8 % épargne-pension, 10 % épargne à long terme). Les virements eux-mêmes se font par ordres permanents à ta banque : l'app vérifie qu'ils passent.</p>
+    </form>
+  </main>`;
+}
+function openRetEnv(i) {
+  const e = i === null ? {name: '', emoji: '💶', monthly: 0, cap: 0, r: 3, tax: 0, keys: '', balance: 0, asOf: localISO()} : R().env[i];
+  openSheet(`<h3>${i === null ? 'Nouvelle enveloppe' : esc(e.name)}<button class="icon-btn" data-a="close">✕</button></h3>
+    <form id="retEnvForm" data-i="${i === null ? '' : i}">
+      <div class="grid2" style="grid-template-columns:3fr 1fr"><div><label>Nom</label><input name="name" required value="${esc(e.name)}"></div><div><label>Emoji</label><input name="emoji" maxlength="4" value="${esc(e.emoji || '💶')}"></div></div>
+      <div class="grid2">
+        <div><label>Versement prévu (€/mois)</label><input name="monthly" inputmode="decimal" value="${String(e.monthly || 0).replace('.', ',')}"></div>
+        <div><label>Rendement supposé (%/an)</label><input name="r" inputmode="decimal" value="${String(e.r || 0).replace('.', ',')}"></div>
+        <div><label>Plafond fiscal annuel (€)</label><input name="cap" inputmode="decimal" value="${e.cap || 0}"></div>
+        <div><label>Taxe à 60 ans (%)</label><input name="tax" inputmode="decimal" value="${e.tax || 0}"></div>
+        <div><label>Valeur actuelle (€)</label><input name="balance" inputmode="decimal" value="${String(e.balance || 0).replace('.', ',')}"></div>
+        <div><label>À la date du</label><input name="asOf" type="date" value="${e.asOf || localISO()}"></div>
+      </div>
+      <label>Reconnaître les versements qui contiennent (séparés par des virgules)</label>
+      <input name="keys" placeholder="ex. souscription titres, keytrade" value="${esc(e.keys || '')}">
+      <p class="hint">Un mot du libellé ou du bénéficiaire du virement, tel qu'il apparaît dans tes mouvements. Les versements reconnus après la date ci-dessus s'ajoutent à la valeur actuelle.</p>
+      ${i !== null && e.moves !== undefined ? '' : ''}
+      <button class="btn primary">Enregistrer</button>
+      ${i === null ? '' : `<button type="button" class="btn danger" data-a="ret-del" data-i="${i}">Supprimer cette enveloppe</button>`}
+    </form>
+    ${i === null ? '' : `<h2>Versements reconnus</h2><div class="card">${envStats(e).moves.slice(0, 12).map(m => `<div class="row"><div class="grow"><div class="t">${esc(m.merchant)}</div><div class="muted">${shortDate(m.date)}</div></div><b class="num">${eur(m.amount)}</b></div>`).join('') || '<div class="empty">Aucun pour l\'instant.</div>'}</div>`}`);
+}
+
 /* ---------- relevé : solde de départ + mouvements − réservations = solde de fin ---------- */
 const BOOKED_ORDER = ['ITBD', 'CLBD', 'OPBD', 'PRCD'], AVAIL_ORDER = ['ITAV', 'CLAV', 'XPCD'];
 function acctBalances() {
@@ -1056,7 +1211,7 @@ function snapshot() {
   return {v: 1, budgets: state.budgets, recurring: state.recurring,
     expenses: state.expenses.filter(e => e.date >= cutoff),
     bank: {since: state.bank.since, status: state.bank.status, raw: state.bank.raw || []},
-    settings: {period: st.period, salaryPayer: st.salaryPayer, salaryDay: st.salaryDay, bankExcluded: st.bankExcluded, incomes: st.incomes}};
+    settings: {period: st.period, salaryPayer: st.salaryPayer, salaryDay: st.salaryDay, bankExcluded: st.bankExcluded, incomes: st.incomes, retraite: st.retraite}};
 }
 const strHash = str => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return String(h); };
 function b64utf8(str) {
@@ -1361,7 +1516,7 @@ document.addEventListener('click', ev => {
   const a = el.dataset.a, id = el.dataset.id;
   if (a === 'backdrop') { if (ev.target === el) closeSheet(); return; }
   const READONLY = ['fab', 'assign', 'del-rv', 'scan-cam', 'scan-file', 'del-exp', 'add-budget', 'edit-budget', 'del-budget',
-    'add-rec', 'edit-rec', 'del-rec', 'inc-add', 'inc-sugg', 'inc-del', 'export', 'import', 'reset', 'bank-connect', 'bank-code', 'bank-paste', 'acct-toggle'];
+    'add-rec', 'edit-rec', 'del-rec', 'inc-add', 'inc-sugg', 'inc-del', 'ret-edit', 'ret-add', 'ret-del', 'export', 'import', 'reset', 'bank-connect', 'bank-code', 'bank-paste', 'acct-toggle'];
   if (VIEW && READONLY.includes(a)) { ev.preventDefault(); toast('Mode consultation : les modifications se font sur le téléphone principal.'); return; }
   if (VIEW && a === 'sync') { fetchShare(true); return; }
   switch (a) {
@@ -1421,6 +1576,12 @@ document.addEventListener('click', ev => {
     }
     case 'open-income': view = {name: 'income'}; render(); scrollTo(0, 0); break;
     case 'open-releve': view = {name: 'releve'}; render(); scrollTo(0, 0); break;
+    case 'open-ret': view = {name: 'retraite'}; render(); scrollTo(0, 0); break;
+    case 'ret-edit': openRetEnv(+el.dataset.i); break;
+    case 'ret-add': openRetEnv(null); break;
+    case 'ret-del':
+      R().env.splice(+el.dataset.i, 1); save(); closeSheet(); render(); toast('Enveloppe supprimée.');
+      break;
     case 'share-toggle':
       state.settings.share = el.checked; save(); render();
       if (el.checked) publishShare(true).then(() => { render(); toast('Budget publié ✓'); })
@@ -1502,6 +1663,21 @@ document.addEventListener('submit', ev => {
     }
     applyRecurring();
     save(); closeSheet(); render(); toast(d.repeat ? 'Enregistrée, et répétée chaque mois 🔁' : 'Dépense enregistrée ✓');
+  }
+  if (f.id === 'retForm') {
+    const r = R(), n = k => num(d[k]);
+    Object.assign(r, {age: Math.round(n('age')) || r.age, ageDate: localISO(), stop: n('stop') || r.stop, legal: n('legal') || r.legal,
+      need: n('need') || 0, infl: isFinite(n('infl')) ? n('infl') : r.infl, rDraw: isFinite(n('rDraw')) ? n('rDraw') : r.rDraw, refund: n('refund') || 0});
+    save(); render(); toast('Plan recalculé ✓');
+    return;
+  }
+  if (f.id === 'retEnvForm') {
+    const n = k => { const v = num(d[k]); return isFinite(v) ? v : 0; };
+    const data = {name: d.name.trim(), emoji: d.emoji.trim() || '💶', monthly: n('monthly'), r: n('r'), cap: n('cap'), tax: n('tax'),
+      balance: n('balance'), asOf: d.asOf || localISO(), keys: d.keys.trim()};
+    if (f.dataset.i === '') R().env.push({id: uid(), ...data}); else Object.assign(R().env[+f.dataset.i], data);
+    save(); closeSheet(); render(); toast('Enveloppe enregistrée ✓');
+    return;
   }
   if (f.id === 'recForm') {
     const amount = num(d.amount), day = Math.min(31, Math.max(1, parseInt(d.day, 10) || 1));
