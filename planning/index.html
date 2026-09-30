@@ -345,7 +345,7 @@ function settingsHTML() {
   <main>
     <h2>Famille</h2>
     <div class="card">${persons().map(p => `<div class="row" data-a="person" data-id="${p.id}"><span class="pdot" style="background:${p.color}">${esc(p.emoji)}</span>
-      <div class="grow"><div class="t">${esc(p.name)}</div><div class="muted">${p.adult ? 'Adulte' : 'Enfant'}${p.alias ? ' · sur l\'horaire : ' + esc(p.alias) : ''}${Object.keys(p.codes || {}).length ? ' · ' + Object.keys(p.codes).length + ' codes connus' : ''}</div></div><span class="muted">›</span></div>`).join('')}
+      <div class="grow"><div class="t">${esc(p.name)}</div><div class="muted">${p.adult ? 'Adulte' : 'Enfant'}${p.alias ? ' · sur l\'horaire : ' + esc(p.alias) : ''}${Object.keys(p.codes || {}).length ? ' · ' + Object.keys(p.codes).length + ' codes' : ''}</div></div><span class="muted">›</span></div>`).join('')}
       <button class="btn soft" data-a="person-new">＋ Ajouter une personne</button></div>
 
     <h2>Twizzit et autres agendas</h2>
@@ -477,8 +477,9 @@ function personForm(p = {}) {
     <label class="check"><input type="checkbox" id="fAd" ${e.adult ? 'checked' : ''}> Adulte (parent)</label>
     <label for="fAl">Nom tel qu'écrit sur l'horaire de travail</label><input id="fAl" value="${esc(e.alias)}" placeholder="ex. MEERE S. ou prénom">
     <p class="hint">Utile quand la feuille contient toute l'équipe : Claude cherche cette ligne.</p>
-    ${codes.length ? `<label>Codes appris</label><div class="muted">${codes.map(([k, c]) => `<b>${esc(k)}</b> ${c.off ? 'repos' : esc((c.start || '?') + '–' + (c.end || '?'))}${c.label ? ' ' + esc(c.label) : ''}`).join(' · ')}</div>
-      <button class="btn" data-a="codes-reset" data-id="${e.id}">Oublier ces codes</button>` : ''}
+    <label for="fCd">Codes de son horaire (un par ligne)</label>
+    <textarea id="fCd" style="min-height:150px;font-family:ui-monospace,Menlo,monospace;font-size:14px" placeholder="M = 06:00-15:00 Matin&#10;S = 13:00-21:00 Soir&#10;/ = congé">${esc(codesText(e.codes))}</textarea>
+    <p class="hint">Format : <b>CODE = début-fin libellé</b>, ou <b>CODE = congé libellé</b>. Un code absent de cette liste sera signalé ⚠️ à l'import.</p>
     <button class="btn primary" data-a="save-person" data-id="${e.id || ''}">Enregistrer</button>
     ${e.id && persons().length > 1 ? `<button class="btn danger" data-a="del-person" data-id="${e.id}">Retirer ${esc(e.name)}</button>` : ''}`);
 }
@@ -504,11 +505,33 @@ function extSheet(o) {
 
 /* ---------- lecture d'un horaire par Claude ---------- */
 let imp = null;
+const codeKey = c => String(c || '').trim().toUpperCase().replace(/\s+/g, '');
+// Les heures viennent UNIQUEMENT des codes connus de la personne (ou réglés dans l'écran de vérification).
+function applyShiftCode(d, p) {
+  const k = codeKey(d.code); d.code = k;
+  const c = imp?.newCodes?.[k] || p.codes?.[k];
+  if (c) Object.assign(d, {start: c.off ? '' : c.start || '', end: c.off ? '' : c.end || '', start2: '', end2: '', label: c.label || k, off: !!c.off, unknown: !c.off && !c.start});
+  else Object.assign(d, {start: '', end: '', start2: '', end2: '', off: false, label: '⚠️ Horaire illisible', unknown: true});
+  return d;
+}
+const codesText = codes => Object.entries(codes || {}).map(([k, c]) => `${k} = ${c.off ? 'congé' : (c.start || '?') + '-' + (c.end || '?')}${c.label ? ' ' + c.label : ''}`).join('\n');
+function parseCodesText(t) {
+  const out = {};
+  for (const line of String(t).split(/\n/)) {
+    const m = line.trim().match(/^(\S+)\s*=\s*(?:(\d{1,2}[:h.]?\d{0,2})\s*[-–àa]\s*(\d{1,2}[:h.]?\d{0,2})|(cong[ée]|repos|off|libre))\s*(.*)$/i);
+    if (!m) continue;
+    const k = codeKey(m[1]);
+    out[k] = m[4] ? {start: '', end: '', label: m[5].trim() || 'Congé', off: true} : {start: normTime(m[2]), end: normTime(m[3]), label: m[5].trim(), off: false};
+  }
+  return out;
+}
 function importForm() {
   const def = adults().find(p => p.id !== 'papa') || persons()[0];
   const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
   sheet(`<h3>Importer un horaire <button class="icon-btn" data-a="close">✕</button></h3>
-    <label for="iP">Horaire de</label>${personSelect('iP', imp?.person || def?.id)}
+    <label for="iP">Horaire de</label>${personSelect('iP', imp?.person || def?.id).replace('<select id="iP"', '<select id="iP" data-c="iP"')}
+    <label for="iA">Nom tel qu'écrit dans la colonne « Nom » de la feuille</label>
+    <input id="iA" value="${esc(person(imp?.person || def?.id)?.alias || '')}" placeholder="ex. MARTIN, Ar" autocapitalize="characters">
     <label for="iM">Mois concerné (aide si la feuille n'indique pas l'année)</label>
     <input id="iM" type="month" value="${imp?.month || nm.toISOString().slice(0, 7)}">
     <div class="menu">
@@ -633,8 +656,10 @@ async function readSchedule(source) {
     const text = `Ce document est un horaire de travail (probablement un hôpital belge : horaire d'infirmière).${imgNote}
 Personne à extraire : « ${names} ». Si le document contient plusieurs personnes (tableau d'équipe), utilise UNIQUEMENT la ligne ou colonne de cette personne (nom de famille, prénom ou initiales). Si tu n'es pas sûr de la ligne, dis-le dans "remarques".
 Mois indiqué par l'utilisateur : ${mon || 'inconnu'} (sers-t'en pour l'année et le mois si le document ne les précise pas). Le document peut couvrir plusieurs semaines ou mois : prends tout.
-Codes déjà connus pour cette personne : ${JSON.stringify(p.codes || {})}
-Tableau d'équipe (« Planning par période ») : une ligne par personne, une colonne par jour du mois (lettres L M M J V S D et numéros 1 à 31 en en-tête). Lis la ligne de la personne case par case en suivant les numéros de colonnes, sans décaler. Une barre « / » ou une case vide = repos (off=true, code "/"). Une heure imprimée dans la case sous un code (ex. « M-1 » puis « 06:05 », « PM1 » puis « 10:00 ») est l'heure de début de ce jour. Les annotations manuscrites dans la case comptent : recopie-les dans le code.
+Codes utilisés sur cette feuille (les heures seront déduites des codes par l'application, ne les invente pas) : ${Object.entries(p.codes || {}).map(([k, c]) => k + ' = ' + (c.off ? 'congé' : c.start + '-' + c.end + ' ' + (c.label || ''))).join(' ; ') || 'aucun connu'}.
+Recopie le code EXACT de chaque case (ex. "/", "M", "S", "N", "MC", "CA", "CX"). Si une case est illisible ou si tu hésites, mets le code "?". Ne devine jamais un code. Donne exactement un élément par jour du mois.
+Si tu ne trouves pas la ligne de cette personne, renvoie "jours": [] et "personne_trouvee": "".
+Tableau d'équipe (« Planning par période ») : une ligne par personne, une colonne par jour du mois (lettres L M M J V S D et numéros 1 à 31 en en-tête). Lis la ligne de la personne case par case en suivant les numéros de colonnes, sans décaler. Une barre « / » = congé (code "/"). Une heure imprimée dans la case sous un code (ex. « M-1 » puis « 06:05 », « PM1 » puis « 10:00 ») est l'heure de début de ce jour. Les annotations manuscrites dans la case comptent : recopie-les dans le code.
 Pour chaque jour : le code tel qu'écrit ; les heures de début et de fin (HH:MM, 24 h) d'après le document, sa légende ou les codes connus ; si horaire coupé, la 2e partie dans debut2/fin2 ; off=true pour repos, congé, récupération, jour férié non presté, maladie, formation hors service seulement si indiqué comme tel. Un libellé court en français (Matin, Après-midi, Soir, Nuit, Jour, Repos, Congé…). Si une heure est inconnue, laisse "".
 Réponds UNIQUEMENT avec ce JSON :
 {"personne_trouvee":"nom exact lu sur le document","legende":{"CODE":{"debut":"07:00","fin":"15:30","libelle":"Matin","off":false}},"jours":[{"date":"AAAA-MM-JJ","code":"M","debut":"07:00","fin":"15:30","debut2":"","fin2":"","libelle":"Matin","off":false}],"remarques":""}`;
@@ -642,9 +667,11 @@ Réponds UNIQUEMENT avec ce JSON :
     const days = (r.jours || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.date)).map(d => ({
       date: d.date, code: String(d.code || '').slice(0, 8), start: normTime(d.debut), end: normTime(d.fin), start2: normTime(d.debut2), end2: normTime(d.fin2),
       label: String(d.libelle || '').slice(0, 30), off: !!d.off, on: true}));
-    if (!days.length) throw new Error('Aucun jour trouvé sur ce document. ' + (r.remarques || ''));
+    if (!days.length) throw new Error(r.personne_trouvee ? 'Aucun jour lu sur la ligne ' + r.personne_trouvee + '. ' + (r.remarques || '')
+      : `Claude n'a pas trouvé « ${p.alias || p.name} » sur la feuille. Vérifie le nom tel qu'écrit dans la colonne « Nom ». ${r.remarques || ''}`);
     days.sort((a, b) => a.date.localeCompare(b.date));
-    Object.assign(imp, {days, legend: r.legende || {}, found: r.personne_trouvee || '', note: r.remarques || ''});
+    Object.assign(imp, {days, legend: r.legende || {}, found: r.personne_trouvee || '', note: r.remarques || '', newCodes: {}});
+    days.forEach(d => applyShiftCode(d, p));
     loading(false); reviewImport();
   } catch (err) { loading(false); toast(err.message || 'Lecture impossible.'); }
 }
@@ -654,21 +681,22 @@ function reviewImport() {
   // un code = une ligne de légende ; ce qu'on y règle s'applique à tous les jours portant ce code
   const codes = [...new Set(imp.days.map(d => d.code).filter(Boolean))];
   const ref = c => imp.days.find(d => d.code === c && (d.start || d.off)) || imp.days.find(d => d.code === c);
-  const missing = imp.days.filter(d => d.on && !d.off && !d.start).length;
+  const bad = imp.days.filter(d => d.on && d.unknown);
   sheet(`<h3>Vérifie l'horaire <button class="icon-btn" data-a="close">✕</button></h3>
     <div class="found">👤 Ligne lue : <b>${esc(imp.found || '?')}</b> → ${esc(p.emoji)} ${esc(p.name)}<br>📅 ${cap(fmtDay(imp.days[0].date, {day: 'numeric', month: 'long'}))} → ${fmtDay(imp.days.at(-1).date, {day: 'numeric', month: 'long', year: 'numeric'})} · ${imp.days.length} jours
       ${imp.note ? `<br>💬 ${esc(imp.note)}` : ''}</div>
     ${existing ? `<p class="hint">${existing} prestation(s) déjà enregistrée(s) sur ces dates seront remplacées.</p>` : ''}
-    <label>Codes trouvés : règle les heures une seule fois, elles s'appliquent à tous les jours et seront retenues</label>
+    ${bad.length ? `<div class="found" style="background:#fee2e2;color:#991b1b">⚠️ <b>Je n'arrive pas à lire l'horaire de ${bad.length} jour${bad.length > 1 ? 's' : ''}</b> :<br>${bad.map(d => `${fmtDay(d.date, {weekday: 'short', day: 'numeric'})} (code « ${esc(d.code || '?')} »)`).join(', ')}.<br>
+      Corrige le code du jour dans la liste plus bas en regardant la feuille, ou indique les heures de ce code ci-dessous (il sera retenu). Sinon, ces jours seront enregistrés avec ⚠️.</div>` : '<div class="found" style="background:#dcfce7;color:#166534">✅ Tous les jours correspondent à un code connu.</div>'}
+    <label>Codes de cette feuille (les codes connus sont appliqués automatiquement ; un nouveau code réglé ici est retenu)</label>
     <div class="card" style="padding:4px 12px;box-shadow:none;border:1px solid var(--line)">${codes.map(c => { const r = ref(c), n = imp.days.filter(d => d.code === c).length; return `
-      <div class="rv" style="grid-template-columns:1fr"><div><b>${esc(c)}</b> <span class="muted">${n} jour${n > 1 ? 's' : ''}${r.label ? ' · ' + esc(r.label) : ''}</span>
+      <div class="rv" style="grid-template-columns:1fr"><div><b>${esc(c)}</b> <span class="muted">${n} jour${n > 1 ? 's' : ''} · ${r.unknown ? '<span style="color:var(--danger)">code inconnu</span>' : esc(r.label)}</span>
         <div class="g3" style="grid-template-columns:1fr 1fr 90px"><input type="time" data-c="lg" data-code="${esc(c)}" data-k="start" value="${r.off ? '' : r.start}" ${r.off ? 'disabled' : ''}>
           <input type="time" data-c="lg" data-code="${esc(c)}" data-k="end" value="${r.off ? '' : r.end}" ${r.off ? 'disabled' : ''}>
           <label class="check" style="margin:0;font-size:13px"><input type="checkbox" data-c="lg" data-code="${esc(c)}" data-k="off" ${r.off ? 'checked' : ''}> repos</label></div></div></div>`; }).join('')}</div>
-    ${missing ? `<p class="flag">${missing} jour(s) de travail sans heure : complète les codes ci-dessus.</p>` : ''}
     <label>Jour par jour (décoche un jour pour l'ignorer)</label>
-    <div id="rvList">${imp.days.map((d, i) => `<div class="rv ${d.off ? 'off' : ''}"><input type="checkbox" data-c="rv-on" data-i="${i}" ${d.on ? 'checked' : ''}>
-      <div><b>${cap(fmtDay(d.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</b> <span class="muted">${esc(d.label)}${d.off ? ' · repos' : ''}</span>
+    <div id="rvList">${imp.days.map((d, i) => `<div class="rv ${d.off ? 'off' : ''}" ${d.unknown ? 'style="background:#fef2f2"' : ''}><input type="checkbox" data-c="rv-on" data-i="${i}" ${d.on ? 'checked' : ''}>
+      <div><b>${cap(fmtDay(d.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</b> <span class="muted" ${d.unknown ? 'style="color:var(--danger)"' : ''}>${esc(d.label)}${d.off ? ' · congé' : ''}</span>
       <div class="g3"><input data-c="rv" data-i="${i}" data-k="code" value="${esc(d.code)}" placeholder="code"><input data-c="rv" data-i="${i}" data-k="start" type="time" value="${d.start}"><input data-c="rv" data-i="${i}" data-k="end" type="time" value="${d.end}"></div>
       ${d.start2 ? `<div class="sub">Coupé : ${d.start2}–${d.end2}</div>` : ''}</div></div>`).join('')}</div>
     <button class="btn primary" data-a="imp-save">Enregistrer ${imp.days.filter(d => d.on).length} jours</button>
@@ -681,9 +709,9 @@ function saveImport() {
   days.forEach(d => state.items.push(touch({id: uid(), kind: 'shift', person: imp.person, date: d.date, code: d.code, start: d.start, end: d.end,
     start2: d.start2, end2: d.end2, label: d.label, off: d.off})));
   // mémorise la légende (et les heures corrigées) pour les prochains horaires
+  // seuls les codes réglés par toi sont retenus (jamais une supposition)
   const codes = {...(p.codes || {})};
-  Object.entries(imp.legend || {}).forEach(([k, c]) => { if (k) codes[k] = {start: normTime(c.debut), end: normTime(c.fin), label: c.libelle || '', off: !!c.off}; });
-  days.forEach(d => { if (d.code && (d.start || d.off)) codes[d.code] = {start: d.start, end: d.end, label: d.label, off: d.off}; });
+  Object.entries(imp.newCodes || {}).forEach(([k, c]) => { if (k && k !== '?' && (c.off || c.start)) codes[k] = c; });
   p.codes = codes; touch(p);
   save(); closeSheet(); sel = days[0]?.date || sel; month = sel.slice(0, 7); render();
   toast(`${days.length} jours enregistrés ✓`); imp = null;
@@ -857,6 +885,9 @@ document.addEventListener('click', e => {
   if (a === 'new-shift') return shiftForm();
   if (a === 'import') return importForm();
   if (a === 'pick-pdf' || a === 'pick-cam' || a === 'pick-photo') {
+    const pp = person(val('iP')), al = val('iA');
+    if (!al) return toast('Indique le nom tel qu\'écrit sur la feuille (ex. MARTIN, Ar).');
+    if (pp && pp.alias !== al) { pp.alias = al; touch(pp); save(); }
     imp = {person: val('iP'), month: val('iM')};
     return $(a === 'pick-pdf' ? '#schedIn' : a === 'pick-cam' ? '#camIn' : '#photoIn').click();
   }
@@ -890,7 +921,7 @@ document.addEventListener('click', e => {
   if (a === 'person' || a === 'person-new') return personForm(a === 'person' ? person(id) : {});
   if (a === 'save-person') {
     const n = val('fT'); if (!n) return toast('Prénom obligatoire.');
-    const data = {name: n, emoji: val('fEm') || '🙂', color: val('fCo'), adult: $('#fAd').checked, alias: val('fAl')};
+    const data = {name: n, emoji: val('fEm') || '🙂', color: val('fCo'), adult: $('#fAd').checked, alias: val('fAl'), codes: parseCodesText($('#fCd').value)};
     const p = id ? person(id) : null;
     if (p) Object.assign(p, data), touch(p); else state.persons.push(touch({id: uid(), codes: {}, ...data}));
     save(); closeSheet(); return render();
@@ -927,13 +958,20 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const el = e.target;
+  if (el.dataset.c === 'iP') { $('#iA').value = person(el.value)?.alias || ''; return; }
   if (el.dataset.c === 'rv-on') { imp.days[+el.dataset.i].on = el.checked; return; }
   if (el.dataset.c === 'lg') {
-    const c = el.dataset.code, k = el.dataset.k;
-    imp.days.filter(d => d.code === c).forEach(d => { if (k === 'off') { d.off = el.checked; if (d.off) { d.start = d.end = d.start2 = d.end2 = ''; } } else d[k] = el.value; });
-    return reviewImport();
+    const c = el.dataset.code, k = el.dataset.k, p = person(imp.person);
+    const cur = {...(imp.newCodes[c] || p.codes?.[c] || {start: '', end: '', label: c, off: false})};
+    if (k === 'off') cur.off = el.checked; else cur[k] = el.value;
+    if (cur.label === '⚠️ Horaire illisible') cur.label = c;
+    imp.newCodes[c] = cur;
+    imp.days.filter(d => d.code === c).forEach(d => applyShiftCode(d, p));
+    return setTimeout(reviewImport, 0);
   }
-  if (el.dataset.c === 'rv') { const d = imp.days[+el.dataset.i], k = el.dataset.k; d[k] = el.value.trim(); if (k === 'code') { const c = person(imp.person).codes?.[d.code]; if (c) Object.assign(d, {start: c.start, end: c.end, label: c.label, off: c.off}); reviewImport(); } return; }
+  if (el.dataset.c === 'rv') { const d = imp.days[+el.dataset.i], k = el.dataset.k; d[k] = el.value.trim();
+    if (k === 'code') { applyShiftCode(d, person(imp.person)); setTimeout(reviewImport, 0); } else if (d.start || d.off) { d.unknown = false; if (d.label === '⚠️ Horaire illisible') d.label = d.code; }
+    return; }
   if (el.dataset.c === 'code') { const c = person(val('fPs'))?.codes?.[el.value.trim()]; if (c) { $('#fS').value = c.start || ''; $('#fEn').value = c.end || ''; $('#fLb').value = c.label || ''; $('#fOff').checked = !!c.off; } }
 });
 $('#schedIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
