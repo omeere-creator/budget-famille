@@ -452,6 +452,7 @@ function homeHTML() {
   const color = pct >= 1 ? 'var(--danger)' : 'var(--accent)';
   const inbox = (state.settings.ghRepo && state.settings.ghToken) || VIEW;
   return monthNav(inbox ? '<button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button>' : '<span style="width:40px"></span>') + `<main>
+    <a class="card row" href="planning/" style="display:flex;padding:10px 16px;text-decoration:none;color:inherit"><span style="font-size:20px">📅</span><span class="grow t">Planning de la famille</span><span class="muted">›</span></a>
     <div class="card summary">
       <svg class="ring" viewBox="0 0 108 108">
         <circle cx="54" cy="54" r="46" fill="none" stroke="var(--line)" stroke-width="12"/>
@@ -1397,7 +1398,7 @@ function planningSettingsHTML() {
   return `<h2>App Planning</h2>
     <div class="card"><p class="muted" style="margin-top:0">📅 Horaires, activités des enfants et anniversaires, dans une app séparée qui utilise ton dépôt et ta clé Claude.</p>
       <button class="btn soft" data-a="plan-copy">📋 Copier la configuration pour Planning</button>
-      <a class="btn" href="planning/" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Ouvrir l'app Planning</a>
+      <a class="btn" href="planning/" style="text-align:center;text-decoration:none">Ouvrir l'app Planning</a>
       <p class="hint">Dans Planning : ⚙️ → coller le code → « Utiliser ce code ». Il contient ton jeton et ta clé : ne l'envoie à personne.</p></div>`;
 }
 function shareSettingsHTML() {
