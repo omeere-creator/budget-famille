@@ -452,7 +452,9 @@ function homeHTML() {
   const color = pct >= 1 ? 'var(--danger)' : 'var(--accent)';
   const inbox = (state.settings.ghRepo && state.settings.ghToken) || VIEW;
   return monthNav(inbox ? '<button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button>' : '<span style="width:40px"></span>') + `<main>
-    <a class="card row" href="planning/" style="display:flex;padding:10px 16px;text-decoration:none;color:inherit"><span style="font-size:20px">📅</span><span class="grow t">Planning de la famille</span><span class="muted">›</span></a>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <a class="card row" href="planning/" style="display:flex;padding:10px 14px;text-decoration:none;color:inherit"><span style="font-size:20px">📅</span><span class="grow t">Planning</span><span class="muted">›</span></a>
+      <a class="card row" href="suivi/" style="display:flex;padding:10px 14px;text-decoration:none;color:inherit"><span style="font-size:20px">🗂️</span><span class="grow t">Suivi pro</span><span class="muted">›</span></a></div>
     <div class="card summary">
       <svg class="ring" viewBox="0 0 108 108">
         <circle cx="54" cy="54" r="46" fill="none" stroke="var(--line)" stroke-width="12"/>
