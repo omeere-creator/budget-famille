@@ -382,7 +382,8 @@ function settingsHTML() {
       <div id="sout"></div></div>
 
     <h2>Calendrier de l'iPhone</h2>
-    <div class="card"><p class="muted" style="margin-top:0">Exporte les 4 prochains mois dans un fichier que l'iPhone propose d'ajouter à Calendrier (à refaire quand l'horaire change).</p>
+    ${calSubHTML()}
+    <div class="card"><b>Fichier ponctuel</b><p class="muted">Exporte les 4 prochains mois dans un fichier (à refaire à chaque changement). L'abonnement ci-dessus est préférable.</p>
       <div class="chips" id="expP">${persons().map(p => `<button class="chip on" data-a="chip" data-v="${p.id}">${esc(p.emoji)} ${esc(p.name)}</button>`).join('')}</div>
       <button class="btn" data-a="export">📤 Exporter (.ics)</button></div>
   </main>`;
@@ -852,12 +853,21 @@ async function importICSFile(file) {
   }
   save(); render(); toast(n ? `${n} événement(s) importé(s) ✓` : 'Tout était déjà importé.');
 }
-function exportICS() {
-  const who = picked('expP'); if (!who.length) return toast('Choisis au moins une personne.');
-  const from = today(), to = addDays(from, 122), stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+// Fichier iCal (heure de Bruxelles, lignes pliées à 75 octets comme l'exige la norme)
+const VTZ = ['BEGIN:VTIMEZONE', 'TZID:Europe/Brussels', 'BEGIN:DAYLIGHT', 'TZOFFSETFROM:+0100', 'TZOFFSETTO:+0200', 'TZNAME:CEST', 'DTSTART:19700329T020000', 'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU', 'END:DAYLIGHT',
+  'BEGIN:STANDARD', 'TZOFFSETFROM:+0200', 'TZOFFSETTO:+0100', 'TZNAME:CET', 'DTSTART:19701025T030000', 'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU', 'END:STANDARD', 'END:VTIMEZONE'];
+function foldICS(line) {
+  const enc = new TextEncoder(); if (enc.encode(line).length <= 75) return line;
+  const out = []; let cur = '', n = 0;
+  for (const ch of line) { const b = enc.encode(ch).length; if (n + b > (out.length ? 74 : 75)) { out.push(cur); cur = ''; n = 0; } cur += ch; n += b; }
+  out.push(cur); return out.join('\r\n ');
+}
+function buildICS(who, from, to, name = 'Planning Famille') {
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
   const e = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
   const dt = (d, t) => d.replace(/-/g, '') + (t ? 'T' + t.replace(':', '') + '00' : '');
-  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Planning Famille//FR', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:Planning Famille'];
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Planning Famille//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${e(name)}`,
+    'X-WR-TIMEZONE:Europe/Brussels', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H', ...VTZ];
   for (const o of occurrences(from, to)) {
     if (o.off || o.cancelled || (o.persons.length && !o.persons.some(p => who.includes(p)))) continue;
     const names = o.persons.map(p => person(p)?.name).filter(Boolean).join(', ');
@@ -865,16 +875,78 @@ function exportICS() {
     segs.forEach(([s, en], k) => {
       L.push('BEGIN:VEVENT', `UID:${(o.item?.id || o.ext?.uid || '').replace(/[^\w.-]/g, '')}-${o.date}-${k}@planning-famille`, `DTSTAMP:${stamp}`);
       if (!s) L.push(`DTSTART;VALUE=DATE:${dt(o.date)}`, `DTEND;VALUE=DATE:${dt(addDays(o.date, 1))}`);
-      else { const endD = en && en <= s ? addDays(o.date, 1) : o.date; L.push(`DTSTART:${dt(o.date, s)}`, `DTEND:${dt(endD, en || s)}`); }
+      else { const endD = en && en <= s ? addDays(o.date, 1) : o.date; L.push(`DTSTART;TZID=Europe/Brussels:${dt(o.date, s)}`, `DTEND;TZID=Europe/Brussels:${dt(endD, en || s)}`); }
       L.push(`SUMMARY:${e(`${o.emoji} ${o.title}${names && o.kind !== 'bday' ? ' — ' + names : ''}`)}`);
       if (o.sub) L.push(`LOCATION:${e(o.sub)}`);
       L.push('END:VEVENT');
     });
   }
   L.push('END:VCALENDAR');
-  const file = new File([L.join('\r\n')], 'planning-famille.ics', {type: 'text/calendar'});
+  return L.map(foldICS).join('\r\n') + '\r\n';
+}
+function exportICS() {
+  const who = picked('expP'); if (!who.length) return toast('Choisis au moins une personne.');
+  const file = new File([buildICS(who, today(), addDays(today(), 122))], 'planning-famille.ics', {type: 'text/calendar'});
   if (navigator.canShare?.({files: [file]})) navigator.share({files: [file], title: 'Planning Famille'}).catch(() => {});
   else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+}
+
+/* ---------- abonnement Calendrier iPhone (gist secret, mis à jour à chaque synchro) ---------- */
+const calItem = () => state.items.find(i => i.id === 'cal-sub' && !i.del);
+const calURL = c => `https://gist.githubusercontent.com/${c.owner}/${c.gist}/raw/planning-famille.ics`;
+function calSubHTML() {
+  const c = calItem();
+  if (!c) return `<div class="card"><b>Abonnement automatique</b> <span class="tag ok">recommandé</span>
+    <p class="muted">Crée un lien que vos iPhone relisent tout seuls : chaque changement dans le planning (nouvel horaire, activité…) apparaît dans l'app Calendrier sans rien renvoyer.</p>
+    <label>Qui inclure</label><div class="chips" id="subP">${persons().map(p => `<button class="chip on" data-a="chip" data-v="${p.id}">${esc(p.emoji)} ${esc(p.name)}</button>`).join('')}</div>
+    <button class="btn primary" data-a="cal-create">🔗 Créer le lien d'abonnement</button>
+    <p class="hint">Le lien est secret (non listé) mais toute personne qui l'a peut lire le planning : ne l'envoie qu'à ta femme. Ton jeton GitHub doit avoir l'autorisation <b>Gists : Read and write</b> (voir l'aide si un message d'erreur apparaît).</p></div>`;
+  const url = calURL(c);
+  return `<div class="card"><b>Abonnement automatique</b> <span class="tag ok">actif</span>
+    <p class="muted">Inclut : ${(c.persons || []).map(id => esc(person(id)?.name || '?')).join(', ')}. ${cfg.calAt ? 'Dernière mise à jour du lien : ' + new Date(cfg.calAt).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) + '.' : ''}</p>
+    <label>Lien d'abonnement</label><input readonly value="${esc(url)}">
+    <button class="btn" data-a="copy" data-v="${esc(url)}">📋 Copier le lien</button>
+    <a class="btn primary" href="${esc(url.replace(/^https:/, 'webcal:'))}" style="text-decoration:none">📲 S'abonner sur cet iPhone</a>
+    <p class="hint"><b>Si le bouton ne fait rien</b>, ou sur l'iPhone de ta femme : Réglages → Apps → Calendrier → Comptes de calendrier → Ajouter un compte → Autre → « Ajouter un calendrier avec abonnement » → coller le lien → Suivant → Enregistrer.</p>
+    <button class="btn" data-a="cal-push">🔄 Mettre à jour le lien maintenant</button>
+    <button class="btn danger" data-a="cal-stop">Arrêter l'abonnement (supprime le lien)</button></div>`;
+}
+function gistFetch(path, opt = {}) {
+  return fetch(`${GH_API}${path}`, {...opt, headers: {Authorization: `Bearer ${cfg.ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json'}});
+}
+const gistErr = st => st === 403 || st === 404
+  ? 'Ton jeton GitHub n\'a pas le droit de créer un gist. Sur GitHub : photo de profil → Settings → Developer settings → Personal access tokens → Fine-grained tokens → ton jeton → Edit → « Account permissions » → Gists : Read and write → Update.'
+  : st === 401 ? 'Jeton GitHub invalide ou expiré.' : `Erreur GitHub (${st}).`;
+function calICS(c) { return buildICS(c.persons || [], addDays(today(), -31), addDays(today(), 365)); }
+async function calCreate() {
+  const who = picked('subP'); if (!who.length) return toast('Choisis au moins une personne.');
+  if (!cfg.ghToken) return toast('Configure d\'abord la synchronisation.');
+  loading(true, 'Création du lien…');
+  try {
+    const c = {persons: who};
+    const r = await gistFetch('/gists', {method: 'POST', body: JSON.stringify({description: 'Planning Famille (abonnement calendrier)', public: false,
+      files: {'planning-famille.ics': {content: calICS(c)}}})});
+    if (!r.ok) throw new Error(gistErr(r.status));
+    const j = await r.json();
+    state.items.push(touch({id: 'cal-sub', kind: 'cal', gist: j.id, owner: j.owner?.login, persons: who}));
+    cfg.calAt = new Date().toISOString(); cfg.calHash = strHash(calICS(calItem()).replace(/DTSTAMP:.*\r\n/g, '')); persistCfg();
+    save(); render(); toast('Lien créé ✓ Touche « S\'abonner sur cet iPhone »');
+  } catch (err) { toast(err.message); } finally { loading(false); }
+}
+const strHash = str => { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0; return String(h); };
+async function calPublish(manual = false) {
+  const c = calItem(); if (!c || !cfg.ghToken) return;
+  const ics = calICS(c), h = strHash(ics.replace(/DTSTAMP:.*\r\n/g, ''));
+  if (!manual && h === cfg.calHash) return;
+  const r = await gistFetch(`/gists/${c.gist}`, {method: 'PATCH', body: JSON.stringify({files: {'planning-famille.ics': {content: ics}}})});
+  if (!r.ok) { if (manual) toast(r.status === 404 ? 'Seul le téléphone qui a créé le lien peut le mettre à jour.' : gistErr(r.status)); return; }
+  cfg.calHash = h; cfg.calAt = new Date().toISOString(); persistCfg();
+  if (manual) { toast('Lien mis à jour ✓ (l\'iPhone le relit dans l\'heure)'); render(); }
+}
+async function calStop() {
+  const c = calItem(); if (!c || !confirm('Supprimer le lien ? Le calendrier abonné se videra sur les iPhone.')) return;
+  await gistFetch(`/gists/${c.gist}`, {method: 'DELETE'}).catch(() => {});
+  const it = state.items.find(i => i.id === 'cal-sub'); it.del = true; touch(it); cfg.calHash = ''; persistCfg(); save(); render();
 }
 
 /* ---------- synchronisation avec le dépôt privé ---------- */
@@ -916,6 +988,7 @@ async function syncNow(manual = false) {
     const x = await gh(`/contents/${EXT_FILE}`, {headers: {Accept: 'application/vnd.github.raw+json'}});
     if (x.ok) { ext = await x.json(); localStorage.setItem(CACHE_EXT, JSON.stringify(ext)); }
     cfg.lastSync = new Date().toISOString(); persistCfg();
+    calPublish().catch(e => console.warn(e));
     if (!$('#layer').innerHTML) render();
     if (manual) toast('Planning à jour ✓');
   } catch (err) { if (manual) toast(err.message); else console.warn(err); }
@@ -1059,6 +1132,9 @@ document.addEventListener('click', e => {
   }
   if (a === 'copy') { navigator.clipboard?.writeText(el.dataset.v).then(() => toast('Copié ✓'), () => toast('Copie impossible : sélectionne le texte.')); return; }
   if (a === 'export') return exportICS();
+  if (a === 'cal-create') return calCreate();
+  if (a === 'cal-push') return calPublish(true);
+  if (a === 'cal-stop') return calStop();
 });
 document.addEventListener('change', e => {
   const el = e.target;
