@@ -104,7 +104,8 @@ label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appea
 <body>
 <div id="app"></div>
 <button class="fab" data-a="fab" aria-label="Ajouter">+</button>
-<input type="file" id="schedIn" accept="application/pdf,image/*" hidden>
+<input type="file" id="schedIn" accept="application/pdf,.pdf" hidden>
+<input type="file" id="photoIn" accept="image/*" hidden>
 <input type="file" id="camIn" accept="image/*" capture="environment" hidden>
 <input type="file" id="icsIn" accept=".ics,text/calendar" hidden>
 <div id="layer"></div>
@@ -510,17 +511,14 @@ function importForm() {
     <label for="iP">Horaire de</label>${personSelect('iP', imp?.person || def?.id)}
     <label for="iM">Mois concerné (aide si la feuille n'indique pas l'année)</label>
     <input id="iM" type="month" value="${imp?.month || nm.toISOString().slice(0, 7)}">
-    <div class="grid2"><button class="btn primary" data-a="pick-pdf">📄 PDF ou image</button><button class="btn soft" data-a="pick-cam">📷 Photo</button></div>
-    <p class="hint">Claude lit la feuille et te montre chaque jour avant d'enregistrer. Les codes (M, S, N…) sont retenus pour les prochaines fois.</p>
+    <div class="menu">
+      <button class="btn primary" data-a="pick-photo">🖼️ Choisir une photo dans ma pellicule</button>
+      <button class="btn soft" data-a="pick-cam">📷 Prendre une photo</button>
+      <button class="btn soft" data-a="pick-pdf">📄 Choisir un fichier PDF</button></div>
+    <p class="hint">Après une photo, tu encadres le tableau : c'est ce qui rend la lecture fiable. Le PDF reçu par e-mail reste le plus précis (dans Mail : ouvrir la pièce jointe → Partager → « Enregistrer dans Fichiers », puis ce bouton).</p>
     ${!cfg.apiKey ? '<p class="flag">Ajoute d\'abord ta clé Claude dans ⚙️.</p>' : ''}`);
 }
 const fileB64 = f => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ko; r.readAsDataURL(f); });
-async function imageB64(f) {
-  const img = await createImageBitmap(f), max = 2200, k = Math.min(1, max / Math.max(img.width, img.height));
-  const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', .88).split(',')[1];
-}
 async function callClaude(content, maxTokens = 8000) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {method: 'POST',
     headers: {'content-type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
@@ -536,17 +534,103 @@ async function callClaude(content, maxTokens = 8000) {
   if (!m) throw new Error('La réponse n\'a pas pu être lue.');
   return JSON.parse(m[0]);
 }
-async function readSchedule(file) {
-  const pid = val('iP'), mon = val('iM'), p = person(pid);
+
+/* ---------- recadrage d'une photo (pellicule ou appareil) ---------- */
+let crop = null; // {src: canvas pivoté, r: {x,y,w,h} en fraction de l'image}
+async function openCropper(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch (e) { return toast('Cette image ne peut pas être ouverte.'); }
+  const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
+  crop = {src: c, orig: c, r: {x: .04, y: .04, w: .92, h: .92}};
+  cropSheet();
+}
+// Remplace la photo par le cadre choisi, pour affiner les coins de plus près
+function zoomCrop() {
+  const s = crop.src, r = crop.r, c = document.createElement('canvas');
+  const sx = r.x * s.width, sy = r.y * s.height; c.width = Math.round(r.w * s.width); c.height = Math.round(r.h * s.height);
+  c.getContext('2d').drawImage(s, sx, sy, c.width, c.height, 0, 0, c.width, c.height);
+  crop = {...crop, src: c, r: {x: .02, y: .02, w: .96, h: .96}}; cropSheet();
+}
+function cropSheet() {
+  sheet(`<h3>Encadre le tableau <button class="icon-btn" data-a="close">✕</button></h3>
+    <p class="hint" style="margin-top:0">Fais glisser les coins pour garder seulement le tableau : les noms, l'en-tête des jours et toutes les colonnes jusqu'au 31. Glisse au milieu du cadre pour le déplacer.</p>
+    <canvas id="cropC" style="display:block;margin:8px auto 0;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:10px;background:#000"></canvas>
+    <div class="grid2"><button class="btn" data-a="crop-zoom">🔍 Zoomer sur le cadre</button><button class="btn" data-a="crop-rot">↻ Pivoter</button></div>
+    <button class="btn" data-a="crop-all">⬜ Revenir à toute la photo</button>
+    <button class="btn primary" data-a="crop-ok">✅ Lire ce cadre avec Claude</button>`);
+  const cv = $('#cropC'), box = Math.min(cv.parentElement.clientWidth || 340, 528), maxH = innerHeight * .52, dpr = devicePixelRatio || 1;
+  const k = Math.min(box / crop.src.width, maxH / crop.src.height), W = crop.src.width * k, H = crop.src.height * k;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  $('.sheet').style.userSelect = $('.sheet').style.webkitUserSelect = 'none';
+  const ctx = cv.getContext('2d');
+  const draw = () => {
+    const w = cv.width, h = cv.height, r = crop.r;
+    ctx.drawImage(crop.src, 0, 0, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillRect(0, 0, w, r.y * h); ctx.fillRect(0, (r.y + r.h) * h, w, h); ctx.fillRect(0, r.y * h, r.x * w, r.h * h); ctx.fillRect((r.x + r.w) * w, r.y * h, w, r.h * h);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * dpr; ctx.strokeRect(r.x * w, r.y * h, r.w * w, r.h * h);
+    ctx.fillStyle = '#818cf8';
+    [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x * w, y * h, 11 * dpr, 0, 7); ctx.fill(); });
+  };
+  let drag = null;
+  const pos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height, b]; };
+  cv.onpointerdown = e => {
+    const [x, y, b] = pos(e), r = crop.r, tol = 34 / b.width, toly = 34 / b.height;
+    const corners = [['tl', r.x, r.y], ['tr', r.x + r.w, r.y], ['bl', r.x, r.y + r.h], ['br', r.x + r.w, r.y + r.h]];
+    const hit = corners.find(([, cx, cy]) => Math.abs(cx - x) < tol && Math.abs(cy - y) < toly);
+    drag = hit ? {c: hit[0]} : (x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h) ? {c: 'move', ox: x - r.x, oy: y - r.y} : null;
+    if (drag) cv.setPointerCapture(e.pointerId);
+  };
+  cv.onpointermove = e => {
+    if (!drag) return;
+    let [x, y] = pos(e); x = Math.max(0, Math.min(1, x)); y = Math.max(0, Math.min(1, y));
+    const r = crop.r, min = .05;
+    if (drag.c === 'move') { r.x = Math.max(0, Math.min(1 - r.w, x - drag.ox)); r.y = Math.max(0, Math.min(1 - r.h, y - drag.oy)); }
+    else {
+      let x1 = r.x, y1 = r.y, x2 = r.x + r.w, y2 = r.y + r.h;
+      if (drag.c[1] === 'l') x1 = Math.min(x, x2 - min); else x2 = Math.max(x, x1 + min);
+      if (drag.c[0] === 't') y1 = Math.min(y, y2 - min); else y2 = Math.max(y, y1 + min);
+      Object.assign(r, {x: x1, y: y1, w: x2 - x1, h: y2 - y1});
+    }
+    draw();
+  };
+  cv.onpointerup = cv.onpointercancel = () => { drag = null; };
+  draw();
+}
+function rotateCrop() {
+  const s = crop.src, c = document.createElement('canvas'); c.width = s.height; c.height = s.width;
+  const x = c.getContext('2d'); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(s, 0, 0);
+  const r = crop.r; crop = {...crop, src: c, r: {x: 1 - r.y - r.h, y: r.x, w: r.h, h: r.w}};
+  cropSheet();
+}
+// Découpe le cadre choisi ; envoie une vue d'ensemble + deux zooms (moitié gauche / moitié droite, même cadrage vertical)
+function cropImages() {
+  const s = crop.src, r = crop.r;
+  const sx = Math.round(r.x * s.width), sy = Math.round(r.y * s.height), sw = Math.round(r.w * s.width), sh = Math.round(r.h * s.height);
+  const part = (x0, w0, max) => {
+    const k = Math.min(1, max / Math.max(w0, sh)), c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w0 * k)); c.height = Math.max(1, Math.round(sh * k));
+    c.getContext('2d').drawImage(s, sx + x0, sy, w0, sh, 0, 0, c.width, c.height);
+    return {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: c.toDataURL('image/jpeg', .9).split(',')[1]}};
+  };
+  const half = Math.round(sw * .56);
+  return [part(0, sw, 2000), part(0, half, 1600), part(sw - half, half, 1600)];
+}
+
+async function readSchedule(source) {
+  const pid = imp?.person, mon = imp?.month || '', p = person(pid);
+  if (!p) return toast('Choisis d\'abord la personne.');
   if (!cfg.apiKey) return toast('Ajoute ta clé Claude dans les réglages.');
-  imp = {person: pid, month: mon};
   loading(true, 'Claude lit l\'horaire… (20 à 60 secondes)');
   try {
-    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-    const doc = isPdf ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: await fileB64(file)}}
-      : {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: await imageB64(file)}};
+    let blocks, imgNote = '';
+    if (source instanceof File) blocks = [{type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: await fileB64(source)}}];
+    else {
+      blocks = source;
+      imgNote = `\nTu reçois 3 images de la MÊME feuille photographiée : 1) vue d'ensemble du tableau ; 2) zoom sur la moitié gauche (colonne des noms et premiers jours) ; 3) zoom sur la moitié droite (derniers jours). Les trois ont exactement le même cadrage vertical : la ligne d'une personne est à la même hauteur relative dans les trois images. Repère la ligne et les numéros de jours sur l'image 1 et 2, puis lis les cases sur les zooms 2 et 3.`;
+    }
     const names = [p.alias, p.name].filter(Boolean).join(' / ');
-    const text = `Ce document est un horaire de travail (probablement un hôpital belge : horaire d'infirmière).
+    const text = `Ce document est un horaire de travail (probablement un hôpital belge : horaire d'infirmière).${imgNote}
 Personne à extraire : « ${names} ». Si le document contient plusieurs personnes (tableau d'équipe), utilise UNIQUEMENT la ligne ou colonne de cette personne (nom de famille, prénom ou initiales). Si tu n'es pas sûr de la ligne, dis-le dans "remarques".
 Mois indiqué par l'utilisateur : ${mon || 'inconnu'} (sers-t'en pour l'année et le mois si le document ne les précise pas). Le document peut couvrir plusieurs semaines ou mois : prends tout.
 Codes déjà connus pour cette personne : ${JSON.stringify(p.codes || {})}
@@ -554,7 +638,7 @@ Tableau d'équipe (« Planning par période ») : une ligne par personne, une co
 Pour chaque jour : le code tel qu'écrit ; les heures de début et de fin (HH:MM, 24 h) d'après le document, sa légende ou les codes connus ; si horaire coupé, la 2e partie dans debut2/fin2 ; off=true pour repos, congé, récupération, jour férié non presté, maladie, formation hors service seulement si indiqué comme tel. Un libellé court en français (Matin, Après-midi, Soir, Nuit, Jour, Repos, Congé…). Si une heure est inconnue, laisse "".
 Réponds UNIQUEMENT avec ce JSON :
 {"personne_trouvee":"nom exact lu sur le document","legende":{"CODE":{"debut":"07:00","fin":"15:30","libelle":"Matin","off":false}},"jours":[{"date":"AAAA-MM-JJ","code":"M","debut":"07:00","fin":"15:30","debut2":"","fin2":"","libelle":"Matin","off":false}],"remarques":""}`;
-    const r = await callClaude([doc, {type: 'text', text}]);
+    const r = await callClaude([...blocks, {type: 'text', text}]);
     const days = (r.jours || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.date)).map(d => ({
       date: d.date, code: String(d.code || '').slice(0, 8), start: normTime(d.debut), end: normTime(d.fin), start2: normTime(d.debut2), end2: normTime(d.fin2),
       label: String(d.libelle || '').slice(0, 30), off: !!d.off, on: true}));
@@ -772,8 +856,14 @@ document.addEventListener('click', e => {
   if (a === 'new-bday') return bdayForm();
   if (a === 'new-shift') return shiftForm();
   if (a === 'import') return importForm();
-  if (a === 'pick-pdf') return $('#schedIn').click();
-  if (a === 'pick-cam') return $('#camIn').click();
+  if (a === 'pick-pdf' || a === 'pick-cam' || a === 'pick-photo') {
+    imp = {person: val('iP'), month: val('iM')};
+    return $(a === 'pick-pdf' ? '#schedIn' : a === 'pick-cam' ? '#camIn' : '#photoIn').click();
+  }
+  if (a === 'crop-rot') return rotateCrop();
+  if (a === 'crop-all') { crop.src = crop.orig; crop.r = {x: 0, y: 0, w: 1, h: 1}; return cropSheet(); }
+  if (a === 'crop-zoom') return zoomCrop();
+  if (a === 'crop-ok') return readSchedule(cropImages());
   if (a === 'imp-save') return saveImport();
   if (a === 'save-event') {
     const t = val('fT'), d = val('fD'); if (!t || !d) return toast('Titre et date obligatoires.');
@@ -846,8 +936,9 @@ document.addEventListener('change', e => {
   if (el.dataset.c === 'rv') { const d = imp.days[+el.dataset.i], k = el.dataset.k; d[k] = el.value.trim(); if (k === 'code') { const c = person(imp.person).codes?.[d.code]; if (c) Object.assign(d, {start: c.start, end: c.end, label: c.label, off: c.off}); reviewImport(); } return; }
   if (el.dataset.c === 'code') { const c = person(val('fPs'))?.codes?.[el.value.trim()]; if (c) { $('#fS').value = c.start || ''; $('#fEn').value = c.end || ''; $('#fLb').value = c.label || ''; $('#fOff').checked = !!c.off; } }
 });
-$('#schedIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) readSchedule(f); });
-$('#camIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) readSchedule(f); });
+$('#schedIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (f.type.startsWith('image/')) return openCropper(f); readSchedule(f); });
+['#camIn', '#photoIn'].forEach(id => $(id).addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) openCropper(f); }));
 $('#icsIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importICSFile(f); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && (!cfg.lastSync || Date.now() - new Date(cfg.lastSync) > 60000)) syncNow(); });
 // lien direct avec un code : …/planning/#PL1-…

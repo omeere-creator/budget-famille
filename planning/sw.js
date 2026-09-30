@@ -1,5 +1,5 @@
 // Planning Famille : réseau d'abord, cache en secours (hors ligne)
-const CACHE = 'planning-famille-v4';
+const CACHE = 'planning-famille-v5';
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './index.html', './manifest.json', './icon-192.png']))); });
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('planning-famille-') && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {
