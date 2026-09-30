@@ -215,6 +215,7 @@ function occurrences(from, to) {
   for (const f of live(state.feeds)) {
     const evs = ext.feeds?.[f.id]?.events || [];
     for (const e of evs) {
+      if (/@planning-famille$/.test(e.uid || '')) continue; // notre propre abonnement : jamais en double
       const d = e.start.slice(0, 10);
       const last = (e.end || e.start).slice(0, 10);
       if (last < from || d > to) continue;
@@ -1109,6 +1110,7 @@ document.addEventListener('click', e => {
   if (a === 'save-feed') {
     const url = val('fU').replace(/^webcals?:\/\//i, 'https://');
     if (!/^https:\/\/\S+$/i.test(url)) return toast('Colle le lien iCal complet (webcal:// ou https://).');
+    if (/planning-famille\.ics/i.test(url) || (calItem() && url.includes(calItem().gist))) return toast('Ce lien est celui de ton propre planning : il sert à t\'abonner dans l\'app Calendrier de l\'iPhone, pas ici. Colle ici le lien de Twizzit.');
     const data = {name: val('fT') || 'Agenda', url, person: val('fPs'), emoji: picked('fE')[0] || '⚽'};
     const f = id ? state.feeds.find(x => x.id === id) : null;
     if (f) Object.assign(f, data), touch(f); else state.feeds.push(touch({id: uid(), ...data}));
