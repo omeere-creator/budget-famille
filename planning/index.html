@@ -327,7 +327,7 @@ function homeHTML() {
   const kids = persons().filter(p => !p.adult).length;
   const setup = !cfg.ghRepo ? `<div class="card" style="border:1px solid var(--warn)"><b>Première étape</b><p class="muted">Colle le code de configuration copié depuis l'app Budget (⚙️ → App Planning) pour synchroniser avec ton dépôt et utiliser Claude.</p><button class="btn primary" data-a="settings">⚙️ Ouvrir les réglages</button></div>`
     : !kids ? `<div class="card"><b>Ajoute les enfants</b><p class="muted">Dans ⚙️ → Famille, avec leur couleur. Tu pourras ensuite leur attribuer les activités.</p><button class="btn soft" data-a="settings">⚙️ Réglages</button></div>` : '';
-  return `<header><a class="icon-btn" href="../" aria-label="Budget" style="text-decoration:none">💶</a><button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button><h1>📅 Planning</h1><button class="icon-btn" data-a="settings" aria-label="Réglages">⚙️</button></header>
+  return `<header><a class="icon-btn" href="../" style="text-decoration:none;padding:0 10px;font-size:15px;font-weight:600">← Budget</a><button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button><h1>📅 Planning</h1><button class="icon-btn" data-a="settings" aria-label="Réglages">⚙️</button></header>
   <main>${setup}${calHTML(byDay)}
     <h2>${sel === today() ? 'Cette semaine' : 'À partir du ' + fmtDay(sel, {day: 'numeric', month: 'long'})}</h2>${agendaHTML(occ, busy)}
     ${sel !== today() ? '<button class="btn soft" data-a="gotoday" style="margin-top:0;margin-bottom:12px">↩︎ Revenir à aujourd\'hui</button>' : ''}
