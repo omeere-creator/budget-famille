@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Planning">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Planning Famille</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#4f46e5;--accent-2:#e0e7ff;--danger:#dc2626;--warn:#b45309;--ok:#15803d;--r:16px}
+@media (prefers-color-scheme:dark){:root{--bg:#0b0f14;--card:#151b23;--text:#e5e7eb;--muted:#9ca3af;--line:#263041;--accent:#818cf8;--accent-2:#312e81;--warn:#fbbf24;--ok:#4ade80}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+body{padding:env(safe-area-inset-top) 0 calc(100px + env(safe-area-inset-bottom))}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 10px;display:flex;align-items:center;gap:8px;max-width:560px;margin:0 auto}
+header h1{flex:1;min-width:0;font-size:18px;margin:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{border:0;background:var(--card);color:var(--text);min-width:40px;height:40px;border-radius:12px;font-size:18px;display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer}
+main{padding:0 16px;max-width:560px;margin:0 auto}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:22px 4px 8px}
+.card{background:var(--card);border-radius:var(--r);padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.muted{color:var(--muted);font-size:14px}
+.hint{font-size:13px;color:var(--muted);margin:8px 2px 0}
+.fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom));width:62px;height:62px;border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:32px;line-height:1;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:6;cursor:pointer}
+.row{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.row:last-child{border-bottom:0}
+.row .grow{flex:1;min-width:0}
+.row .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{text-align:center;color:var(--muted);padding:18px 8px}
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));animation:up .22s ease}
+@keyframes up{from{transform:translateY(40px);opacity:0}}
+.sheet h3{margin:0 0 14px;font-size:19px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 2px 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;appearance:none;-webkit-appearance:none}
+textarea{min-height:70px;resize:vertical}
+input[type=color]{height:46px;padding:4px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{display:block;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:600;cursor:pointer;margin-top:14px;background:var(--line);color:var(--text);text-align:center;text-decoration:none}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.soft{background:var(--accent-2);color:var(--text)}
+.btn.danger{background:transparent;color:var(--danger)}
+.menu .btn{text-align:left;margin-top:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:99px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
+.chip.on{background:var(--accent);color:#fff;border-color:transparent}
+.chip.emo{font-size:20px;padding:6px 9px}
+label.check{display:flex;align-items:center;gap:10px;color:var(--text);font-size:15px;margin-top:16px}
+label.check input{width:22px;height:22px;flex:none;appearance:auto;-webkit-appearance:checkbox;padding:0}
+.loading{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-weight:600;text-align:center;padding:20px}
+.spin{width:44px;height:44px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:12px;z-index:50;font-size:14px;max-width:90vw;text-align:center}
+/* calendrier */
+.mhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.mhead b{font-size:17px}
+.mhead .icon-btn{box-shadow:none;background:var(--bg)}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}
+.dow{font-size:12px;color:var(--muted);text-align:center;padding:2px 0 4px}
+.cell{min-height:60px;border-radius:10px;padding:3px 1px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;background:transparent;border:0;color:inherit;font:inherit;min-width:0}
+.cell.out{opacity:.35}
+.cell .n{font-size:14px;font-weight:600;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;flex:none}
+.cell.today .n{background:var(--accent);color:#fff}
+.cell.sel{background:var(--accent-2)}
+.codes{display:flex;flex-wrap:wrap;justify-content:center;gap:1px 3px;font-size:10px;font-weight:700;line-height:1.15;max-width:100%;overflow:hidden}
+.dots{display:flex;gap:2px;flex-wrap:wrap;justify-content:center;max-width:100%}
+.dots i{width:6px;height:6px;border-radius:50%;display:block}
+.dots .b{font-size:9px;line-height:6px}
+.filter{margin:10px 0 2px}
+.filter .chip{font-size:13px;padding:6px 10px}
+.dayh{font-weight:700;margin:16px 2px 4px;display:flex;justify-content:space-between;gap:8px}
+.dayh:first-child{margin-top:0}
+.dayh span{font-weight:400;color:var(--muted);font-size:13px}
+.ev{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;align-items:flex-start}
+.ev:last-child{border-bottom:0}
+.ev .time{width:84px;flex:none;font-size:13px;font-variant-numeric:tabular-nums;color:var(--muted);padding-top:2px}
+.ev .vb{width:4px;align-self:stretch;border-radius:4px;flex:none}
+.ev .grow{flex:1;min-width:0}
+.ev .t{font-weight:500}
+.ev.off .t{color:var(--muted);font-weight:400}
+.ev.cancel .t{text-decoration:line-through;color:var(--muted)}
+.pp{display:inline-block;font-size:12px;padding:1px 7px;border-radius:99px;color:#fff;margin:3px 4px 0 0}
+.flag{font-size:13px;color:var(--warn);margin-top:3px}
+.sub{font-size:13px;color:var(--muted)}
+.none{color:var(--muted);font-size:14px;padding:6px 0}
+.bdays .row{cursor:pointer}
+.tag{font-size:12px;padding:1px 7px;border-radius:99px;background:var(--line);color:var(--text);white-space:nowrap}
+.tag.ok{background:#dcfce7;color:#166534}.tag.ko{background:#fee2e2;color:#991b1b}
+.rv{display:grid;grid-template-columns:26px 1fr;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.rv input[type=checkbox]{width:22px;height:22px;appearance:auto;-webkit-appearance:checkbox;padding:0;margin-top:2px}
+.rv .g3{display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;margin-top:6px}
+.rv .g3 input{padding:8px;font-size:15px}
+.rv.off{opacity:.5}
+.found{background:var(--accent-2);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:8px}
+.pdot{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:18px;flex:none}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<button class="fab" data-a="fab" aria-label="Ajouter">+</button>
+<input type="file" id="schedIn" accept="application/pdf,image/*" hidden>
+<input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+<input type="file" id="icsIn" accept=".ics,text/calendar" hidden>
+<div id="layer"></div>
+
+<script>
+'use strict';
+/* ---------- utilitaires ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const pd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d, 12); };
+const today = () => iso(new Date());
+const addDays = (s, n) => { const d = pd(s); d.setDate(d.getDate() + n); return iso(d); };
+const dow = s => (pd(s).getDay() + 6) % 7 + 1; // 1 = lundi … 7 = dimanche
+const daysBetween = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+const mondayOf = s => addDays(s, 1 - dow(s));
+const TIME = /^([01]?\d|2[0-3])[:hH.]?([0-5]\d)?$/;
+const normTime = t => { const m = String(t || '').trim().match(TIME); return m ? `${pad(+m[1])}:${m[2] || '00'}` : ''; };
+const toMin = (date, t) => { const [y, m, d] = date.split('-').map(Number); const [h, mi] = t.split(':').map(Number); return Date.UTC(y, m - 1, d) / 6e4 + h * 60 + mi; };
+const DOWS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const DOWN = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const fmtDay = (s, o = {weekday: 'long', day: 'numeric', month: 'long'}) => pd(s).toLocaleDateString('fr-BE', o);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const EMOJIS = ['⚽', '🥾', '🏊', '🎨', '🎵', '🩰', '🥋', '🏀', '🎾', '🚴', '📚', '🏫', '🏥', '💼', '🩺', '🎉', '🍽️', '🚗', '✈️', '📅'];
+const COLORS = ['#2563eb', '#db2777', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#ca8a04', '#64748b'];
+const MODELS = [['claude-sonnet-5', 'Sonnet 5 (le plus précis pour les tableaux)'], ['claude-haiku-4-5-20251001', 'Haiku 4.5 (plus rapide)']];
+const GH_API = 'https://api.github.com';
+const FILE = 'data/planning.json', EXT_FILE = 'data/agenda-externe.json';
+
+/* ---------- données ---------- */
+const STORE = 'planning-famille-v1', CFG = 'planning-famille-reglages', CACHE_EXT = 'planning-famille-externe';
+function defaults() {
+  const now = Date.now();
+  return {persons: [
+      {id: 'papa', name: 'Papa', emoji: '👨', color: COLORS[0], adult: true, alias: '', codes: {}, upd: 0},
+      {id: 'maman', name: 'Maman', emoji: '👩‍⚕️', color: COLORS[1], adult: true, alias: '', codes: {}, upd: 0}],
+    items: [], feeds: [], upd: now};
+}
+function loadState() {
+  try { const s = JSON.parse(localStorage.getItem(STORE)); if (s?.persons) return {...defaults(), ...s}; } catch (e) {}
+  return defaults();
+}
+function loadCfg() {
+  let c = {};
+  try { c = JSON.parse(localStorage.getItem(CFG)) || {}; } catch (e) {}
+  c = {apiKey: '', model: MODELS[0][0], ghRepo: '', ghToken: '', lastSync: null, readOnly: false, hidden: [], ...c};
+  // même adresse que l'app Budget : on reprend ses réglages s'ils sont lisibles (sinon : code de configuration)
+  try {
+    const b = JSON.parse(localStorage.getItem('budget-famille-v1'))?.settings;
+    if (b) { if (!c.apiKey && b.apiKey) c.apiKey = b.apiKey; if (!c.ghRepo && b.ghRepo && b.ghToken) { c.ghRepo = b.ghRepo; c.ghToken = b.ghToken; } }
+    const v = JSON.parse(localStorage.getItem('budget-famille-viewer'));
+    if (v?.repo && !c.ghRepo) { c.ghRepo = v.repo; c.ghToken = v.token; }
+  } catch (e) {}
+  return c;
+}
+let state = loadState(), cfg = loadCfg(), ext = {};
+try { ext = JSON.parse(localStorage.getItem(CACHE_EXT)) || {}; } catch (e) {}
+const persistCfg = () => localStorage.setItem(CFG, JSON.stringify(cfg));
+function save() { localStorage.setItem(STORE, JSON.stringify(state)); scheduleSync(); }
+const live = arr => arr.filter(x => !x.del);
+const person = id => state.persons.find(p => p.id === id && !p.del);
+const persons = () => live(state.persons);
+const adults = () => persons().filter(p => p.adult);
+const touch = o => { o.upd = Date.now(); return o; };
+
+/* ---------- occurrences d'une période ---------- */
+function occurrences(from, to) {
+  const out = [];
+  const inR = d => d >= from && d <= to;
+  for (const it of live(state.items)) {
+    if (it.kind === 'shift') {
+      if (!inR(it.date)) continue;
+      out.push({date: it.date, start: it.start || '', end: it.end || '', start2: it.start2 || '', end2: it.end2 || '', allDay: !it.start,
+        title: [it.code, it.label].filter(Boolean).join(' · ') || 'Travail', emoji: it.off ? '🌴' : (person(it.person)?.emoji || '💼'),
+        persons: [it.person], kind: 'shift', item: it, off: !!it.off, work: !it.off});
+    } else if (it.kind === 'event') {
+      const last = it.dateEnd && it.dateEnd > it.date ? it.dateEnd : it.date;
+      for (let d = it.date > from ? it.date : from; d <= last && d <= to; d = addDays(d, 1)) {
+        const multi = last !== it.date;
+        out.push({date: d, start: d === it.date ? it.start || '' : '', end: d === last ? it.end || '' : '', allDay: !it.start || (multi && d !== it.date),
+          title: it.title, emoji: it.emoji || '📅', persons: it.persons || [], kind: 'event', item: it, sub: it.place, work: !!it.work});
+      }
+    } else if (it.kind === 'rec') {
+      const a = it.from && it.from > from ? it.from : from, b = it.until && it.until < to ? it.until : to;
+      const anchor = mondayOf(it.from || '2026-01-05');
+      for (let d = a; d <= b; d = addDays(d, 1)) {
+        if (!(it.days || []).includes(dow(d)) || (it.skip || []).includes(d)) continue;
+        if ((it.every || 1) > 1 && Math.floor(daysBetween(anchor, mondayOf(d)) / 7) % it.every !== 0) continue;
+        out.push({date: d, start: it.start || '', end: it.end || '', allDay: !it.start, title: it.title, emoji: it.emoji || '🔁',
+          persons: it.persons || [], kind: 'rec', item: it, sub: it.place, work: !!it.work});
+      }
+    } else if (it.kind === 'bday') {
+      const [, mm, dd] = it.date.split('-');
+      for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) {
+        let d = `${y}-${mm}-${dd}`;
+        if (mm === '02' && dd === '29' && pd(d).getMonth() !== 1) d = `${y}-02-28`;
+        if (!inR(d)) continue;
+        const by = +it.date.slice(0, 4), age = it.year !== false && by > 1900 ? y - by : null;
+        out.push({date: d, allDay: true, start: '', end: '', title: `Anniversaire de ${it.title}${age ? ` (${age} ans)` : ''}`, emoji: '🎂',
+          persons: it.persons || [], kind: 'bday', item: it});
+      }
+    }
+  }
+  for (const f of live(state.feeds)) {
+    const evs = ext.feeds?.[f.id]?.events || [];
+    for (const e of evs) {
+      const d = e.start.slice(0, 10);
+      const last = (e.end || e.start).slice(0, 10);
+      if (last < from || d > to) continue;
+      for (let x = d < from ? from : d; x <= last && x <= to; x = addDays(x, 1)) {
+        if (e.allDay && x === last && e.end && e.end.length === 10 && x !== d) continue; // fin exclusive des journées entières
+        out.push({date: x, start: !e.allDay && x === d ? e.start.slice(11, 16) : '', end: !e.allDay && x === last ? (e.end || '').slice(11, 16) : '',
+          allDay: !!e.allDay || x !== d, title: e.title, emoji: f.emoji || '⚽', persons: f.person ? [f.person] : [], kind: 'ext', ext: e, feed: f,
+          sub: e.place, cancelled: e.cancelled});
+      }
+    }
+  }
+  const rank = o => o.kind === 'bday' ? 0 : o.allDay ? 1 : 2;
+  out.sort((x, y) => x.date.localeCompare(y.date) || rank(x) - rank(y) || (x.start || '').localeCompare(y.start || ''));
+  return out;
+}
+const visible = o => !o.persons.length || o.persons.some(p => !cfg.hidden.includes(p));
+
+// Intervalles de travail par personne (pour repérer une activité d'enfant sans parent disponible)
+function busyMap(list) {
+  const m = {};
+  for (const o of list) {
+    if (!o.work || !o.start) continue;
+    const segs = [[o.start, o.end], [o.start2, o.end2]].filter(s => s[0]);
+    for (const [s, e] of segs) {
+      const a = toMin(o.date, s); let b = e ? toMin(o.date, e) : a + 480;
+      if (b <= a) b += 1440; // nuit : fin le lendemain
+      o.persons.forEach(p => (m[p] = m[p] || []).push([a, b]));
+    }
+  }
+  return m;
+}
+function noParent(o, busy) {
+  const ad = adults();
+  if (ad.length < 2 || !o.start || o.work || o.kind === 'shift' || o.kind === 'bday' || o.cancelled) return false;
+  if (!o.persons.length || o.persons.some(p => person(p)?.adult)) return false;
+  const a = toMin(o.date, o.start); let b = o.end ? toMin(o.date, o.end) : a + 60; if (b <= a) b = a + 60;
+  return ad.every(p => (busy[p.id] || []).some(([x, y]) => x < b + 30 && a - 30 < y));
+}
+
+/* ---------- affichage ---------- */
+let view = {name: 'home'}, month = today().slice(0, 7), sel = today(), lastOcc = [];
+function timeLabel(o) {
+  if (o.kind === 'bday') return '';
+  if (o.allDay || !o.start) return 'Journée';
+  let t = o.start + (o.end ? '–' + o.end : '');
+  if (o.start2) t += `<br>${o.start2}${o.end2 ? '–' + o.end2 : ''}`;
+  if (o.end && o.end <= o.start && o.kind === 'shift') t += ' <small>(+1)</small>';
+  return t;
+}
+function chipsFor(ids) {
+  return ids.map(person).filter(Boolean).map(p => `<span class="pp" style="background:${p.color}">${esc(p.emoji)} ${esc(p.name)}</span>`).join('');
+}
+function evRow(o, busy) {
+  lastOcc.push(o);
+  const p = person(o.persons[0]), col = p?.color || 'var(--line)';
+  const flag = noParent(o, busy) ? '<div class="flag">⚠️ Vous travaillez tous les deux à ce moment-là</div>' : '';
+  return `<div class="ev ${o.off ? 'off' : ''} ${o.cancelled ? 'cancel' : ''}" data-a="occ" data-i="${lastOcc.length - 1}">
+    <div class="time">${timeLabel(o) || '🎂'}</div><div class="vb" style="background:${col}"></div>
+    <div class="grow"><div class="t">${esc(o.emoji)} ${esc(o.title)}${o.cancelled ? ' — annulé' : ''}</div>
+      ${o.sub ? `<div class="sub">📍 ${esc(o.sub)}</div>` : ''}${o.kind !== 'shift' ? chipsFor(o.persons) : `<div class="sub">${esc(p?.name || '')}</div>`}${flag}</div></div>`;
+}
+function calHTML(occByDay) {
+  const first = month + '-01', start = mondayOf(first);
+  const lastDay = addDays(iso(new Date(+month.slice(0, 4), +month.slice(5, 7), 0, 12)), 0);
+  const end = addDays(mondayOf(lastDay), 6);
+  let cells = DOWS.map(d => `<div class="dow">${d}</div>`).join('');
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    const list = (occByDay[d] || []).filter(visible);
+    const codes = list.filter(o => o.kind === 'shift').map(o => `<span style="color:${person(o.persons[0])?.color || 'inherit'}">${esc(o.item.code || (o.off ? 'R' : '•'))}</span>`).join('');
+    const seen = new Set(); let dots = '';
+    list.filter(o => o.kind !== 'shift').forEach(o => {
+      if (o.kind === 'bday') { if (!seen.has('b')) { seen.add('b'); dots += '<span class="b">🎂</span>'; } return; }
+      const c = person(o.persons[0])?.color || '#94a3b8';
+      if (!seen.has(c) && seen.size < 5) { seen.add(c); dots += `<i style="background:${c}"></i>`; }
+    });
+    cells += `<button class="cell ${d.slice(0, 7) !== month ? 'out' : ''} ${d === today() ? 'today' : ''} ${d === sel ? 'sel' : ''}" data-a="day" data-d="${d}">
+      <span class="n">${+d.slice(8)}</span>${codes ? `<span class="codes">${codes}</span>` : ''}${dots ? `<span class="dots">${dots}</span>` : ''}</button>`;
+  }
+  const title = cap(pd(first).toLocaleDateString('fr-BE', {month: 'long', year: 'numeric'}));
+  return `<div class="card"><div class="mhead"><button class="icon-btn" data-a="mprev" aria-label="Mois précédent">‹</button><b>${title}</b><button class="icon-btn" data-a="mnext" aria-label="Mois suivant">›</button></div>
+    <div class="cal">${cells}</div>
+    ${persons().length > 1 ? `<div class="chips filter">${persons().map(p => `<button class="chip ${cfg.hidden.includes(p.id) ? '' : 'on'}" data-a="filter" data-p="${p.id}" style="${cfg.hidden.includes(p.id) ? '' : `background:${p.color}`}">${esc(p.emoji)} ${esc(p.name)}</button>`).join('')}</div>` : ''}</div>`;
+}
+function agendaHTML(occ, busy) {
+  let h = '';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(sel, i), list = occ.filter(o => o.date === d && visible(o));
+    const rel = d === today() ? 'Aujourd\'hui' : d === addDays(today(), 1) ? 'Demain' : '';
+    h += `<div class="dayh">${cap(fmtDay(d))}${rel ? `<span>${rel}</span>` : ''}</div>`;
+    h += list.length ? list.map(o => evRow(o, busy)).join('') : '<div class="none">Rien de prévu</div>';
+  }
+  return `<div class="card">${h}</div>`;
+}
+function bdaysHTML() {
+  const t = today(), list = occurrences(t, addDays(t, 45)).filter(o => o.kind === 'bday');
+  if (!list.length) return '';
+  return `<h2>Anniversaires à venir</h2><div class="card bdays">${list.map(o => {
+    lastOcc.push(o);
+    const n = daysBetween(t, o.date);
+    return `<div class="row" data-a="occ" data-i="${lastOcc.length - 1}"><span style="font-size:22px">🎂</span><div class="grow"><div class="t">${esc(o.title.replace(/^Anniversaire de /, ''))}</div>
+      <div class="muted">${cap(fmtDay(o.date))}</div></div><span class="tag ${n <= 7 ? 'ko' : ''}">${n === 0 ? 'aujourd\'hui' : n === 1 ? 'demain' : 'dans ' + n + ' j'}</span></div>`;
+  }).join('')}</div>`;
+}
+function homeHTML() {
+  lastOcc = [];
+  const gridStart = mondayOf(month + '-01'), gridEnd = addDays(gridStart, 41);
+  const from = [gridStart, addDays(sel, -1)].sort()[0], to = [gridEnd, addDays(sel, 7)].sort()[1];
+  const occ = occurrences(from, to), byDay = {};
+  occ.forEach(o => (byDay[o.date] = byDay[o.date] || []).push(o));
+  const busy = busyMap(occ);
+  const kids = persons().filter(p => !p.adult).length;
+  const setup = !cfg.ghRepo ? `<div class="card" style="border:1px solid var(--warn)"><b>Première étape</b><p class="muted">Colle le code de configuration copié depuis l'app Budget (⚙️ → App Planning) pour synchroniser avec ton dépôt et utiliser Claude.</p><button class="btn primary" data-a="settings">⚙️ Ouvrir les réglages</button></div>`
+    : !kids ? `<div class="card"><b>Ajoute les enfants</b><p class="muted">Dans ⚙️ → Famille, avec leur couleur. Tu pourras ensuite leur attribuer les activités.</p><button class="btn soft" data-a="settings">⚙️ Réglages</button></div>` : '';
+  return `<header><button class="icon-btn" data-a="sync" aria-label="Synchroniser">🔄</button><h1>📅 Planning</h1><button class="icon-btn" data-a="settings" aria-label="Réglages">⚙️</button></header>
+  <main>${setup}${calHTML(byDay)}
+    <h2>${sel === today() ? 'Cette semaine' : 'À partir du ' + fmtDay(sel, {day: 'numeric', month: 'long'})}</h2>${agendaHTML(occ, busy)}
+    ${sel !== today() ? '<button class="btn soft" data-a="gotoday" style="margin-top:0;margin-bottom:12px">↩︎ Revenir à aujourd\'hui</button>' : ''}
+    ${bdaysHTML()}
+    ${cfg.readOnly ? '<p class="hint">👁 Ce téléphone est en lecture seule : son jeton ne permet pas d\'enregistrer dans le dépôt.</p>' : ''}
+    ${cfg.lastSync ? `<p class="hint" style="text-align:center">Synchronisé ${new Date(cfg.lastSync).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</p>` : ''}
+  </main>`;
+}
+
+/* ---------- réglages ---------- */
+function settingsHTML() {
+  const fs = live(state.feeds);
+  return `<header><button class="icon-btn" data-a="back" aria-label="Retour">←</button><h1>Réglages</h1><span style="width:40px"></span></header>
+  <main>
+    <h2>Famille</h2>
+    <div class="card">${persons().map(p => `<div class="row" data-a="person" data-id="${p.id}"><span class="pdot" style="background:${p.color}">${esc(p.emoji)}</span>
+      <div class="grow"><div class="t">${esc(p.name)}</div><div class="muted">${p.adult ? 'Adulte' : 'Enfant'}${p.alias ? ' · sur l\'horaire : ' + esc(p.alias) : ''}${Object.keys(p.codes || {}).length ? ' · ' + Object.keys(p.codes).length + ' codes connus' : ''}</div></div><span class="muted">›</span></div>`).join('')}
+      <button class="btn soft" data-a="person-new">＋ Ajouter une personne</button></div>
+
+    <h2>Twizzit et autres agendas</h2>
+    <div class="card">${fs.length ? fs.map(f => {
+      const r = ext.feeds?.[f.id];
+      const st = !r ? '<span class="tag">en attente du robot</span>' : r.ok ? `<span class="tag ok">${r.count ?? (r.events || []).length} événements</span>` : '<span class="tag ko">erreur</span>';
+      return `<div class="row" data-a="feed" data-id="${f.id}"><span style="font-size:22px">${esc(f.emoji || '⚽')}</span><div class="grow"><div class="t">${esc(f.name)}</div>
+        <div class="muted">${esc(person(f.person)?.name || 'Toute la famille')}${r && !r.ok ? ' · ' + esc(r.error || '') : ''}</div></div>${st}</div>`;
+    }).join('') : '<p class="muted" style="margin-top:0">Aucun agenda relié. Dans l\'app Twizzit, cherche l\'option de synchronisation de l\'agenda : elle donne un lien iCal (qui commence par webcal:// ou https://).</p>'}
+      <button class="btn soft" data-a="feed-new">＋ Relier un agenda (lien iCal)</button>
+      ${fs.length ? `<button class="btn" data-a="feed-refresh">🔄 Mettre à jour maintenant</button>
+        <p class="hint">Le robot relit ces agendas toutes les 6 heures.${ext.updated ? ' Dernier changement : ' + new Date(ext.updated).toLocaleString('fr-BE', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) + '.' : ''}</p>` : ''}
+      <button class="btn" data-a="ics-file">📥 Importer un fichier .ics (école, club…)</button></div>
+
+    <h2>Synchronisation</h2>
+    <div class="card">
+      <label for="code">Code de configuration ou de partage</label>
+      <input id="code" autocomplete="off" placeholder="PL1-…">
+      <button class="btn primary" data-a="code-apply">Utiliser ce code</button>
+      <p class="hint">Dans l'app Budget : ⚙️ → « App Planning » → « Copier la configuration ».</p>
+      <label for="repo">Dépôt privé</label><input id="repo" value="${esc(cfg.ghRepo)}" placeholder="pseudo/budget-inbox" autocapitalize="off">
+      <label for="tok">Jeton GitHub</label><input id="tok" type="password" value="${esc(cfg.ghToken)}" autocomplete="off" placeholder="github_pat_…">
+      <label for="key">Clé API Claude (pour lire les horaires)</label><input id="key" type="password" value="${esc(cfg.apiKey)}" autocomplete="off" placeholder="sk-ant-…">
+      <label for="model">Modèle</label><select id="model">${MODELS.map(([v, n]) => `<option value="${v}" ${cfg.model === v ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <button class="btn" data-a="cfg-save">Enregistrer</button>
+      <p class="hint">${cfg.lastSync ? 'Dernière synchro : ' + new Date(cfg.lastSync).toLocaleString('fr-BE') : 'Jamais synchronisé.'}${cfg.readOnly ? ' Lecture seule.' : ''}</p></div>
+
+    <h2>Partager avec ta femme</h2>
+    <div class="card">
+      <p class="muted" style="margin-top:0">Crée sur GitHub un jeton pour son téléphone (Fine-grained, dépôt budget-inbox, <b>Contents : Read and write</b>) pour qu'elle puisse aussi ajouter des activités. Avec un jeton en lecture seule, elle consulte seulement.</p>
+      <label for="stok">Jeton de son téléphone</label><input id="stok" type="password" autocomplete="off" placeholder="github_pat_…">
+      <label class="check"><input type="checkbox" id="skey"> Inclure la clé Claude (pour qu'elle importe elle-même ses horaires)</label>
+      <button class="btn soft" data-a="share-code">🔑 Créer son code</button>
+      <div id="sout"></div></div>
+
+    <h2>Calendrier de l'iPhone</h2>
+    <div class="card"><p class="muted" style="margin-top:0">Exporte les 4 prochains mois dans un fichier que l'iPhone propose d'ajouter à Calendrier (à refaire quand l'horaire change).</p>
+      <div class="chips" id="expP">${persons().map(p => `<button class="chip on" data-a="chip" data-v="${p.id}">${esc(p.emoji)} ${esc(p.name)}</button>`).join('')}</div>
+      <button class="btn" data-a="export">📤 Exporter (.ics)</button></div>
+  </main>`;
+}
+
+function render() {
+  $('#app').innerHTML = view.name === 'settings' ? settingsHTML() : homeHTML();
+  document.querySelector('.fab').style.display = view.name === 'home' ? '' : 'none';
+}
+
+/* ---------- feuilles et petits outils ---------- */
+function sheet(html) { $('#layer').innerHTML = `<div class="backdrop" data-a="bg"><div class="sheet">${html}</div></div>`; }
+function closeSheet() { $('#layer').innerHTML = ''; }
+let toastT;
+function toast(msg) { clearTimeout(toastT); document.querySelectorAll('.toast').forEach(t => t.remove()); const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); toastT = setTimeout(() => t.remove(), 3500); }
+function loading(on, msg = '') { document.querySelectorAll('.loading').forEach(l => l.remove()); if (on) { const l = document.createElement('div'); l.className = 'loading'; l.innerHTML = `<div class="spin"></div><div>${esc(msg)}</div>`; document.body.appendChild(l); } }
+const personChips = (sel = []) => `<div class="chips" id="fP">${persons().map(p => `<button class="chip ${sel.includes(p.id) ? 'on' : ''}" data-a="chip" data-v="${p.id}">${esc(p.emoji)} ${esc(p.name)}</button>`).join('')}</div>`;
+const emojiChips = cur => `<div class="chips" id="fE">${EMOJIS.map(e => `<button class="chip emo ${e === cur ? 'on' : ''}" data-a="emo" data-v="${e}">${e}</button>`).join('')}</div>`;
+const picked = id => [...document.querySelectorAll(`#${id} .chip.on`)].map(c => c.dataset.v);
+const val = id => ($('#' + id)?.value ?? '').trim();
+const personSelect = (id, cur, allowNone = false) => `<select id="${id}">${allowNone ? `<option value="">Toute la famille</option>` : ''}${persons().map(p => `<option value="${p.id}" ${p.id === cur ? 'selected' : ''}>${esc(p.emoji)} ${esc(p.name)}</option>`).join('')}</select>`;
+
+/* ---------- formulaires ---------- */
+function addMenu() {
+  sheet(`<h3>Ajouter <button class="icon-btn" data-a="close">✕</button></h3><div class="menu">
+    <button class="btn primary" data-a="import">📄 Importer un horaire de travail (PDF ou photo)</button>
+    <button class="btn soft" data-a="new-rec">🔁 Activité qui revient chaque semaine</button>
+    <button class="btn soft" data-a="new-event">📅 Événement ponctuel</button>
+    <button class="btn soft" data-a="new-bday">🎂 Anniversaire</button>
+    <button class="btn soft" data-a="new-shift">💼 Une prestation de travail</button></div>`);
+}
+function eventForm(it = {}) {
+  const e = it.id ? it : {date: sel, persons: [], emoji: '📅'};
+  sheet(`<h3>${e.id ? 'Modifier' : 'Nouvel événement'} <button class="icon-btn" data-a="close">✕</button></h3>
+    <label for="fT">Titre</label><input id="fT" value="${esc(e.title)}" placeholder="Tournoi, fancy-fair, dentiste…">
+    <label>Pour qui</label>${personChips(e.persons)}
+    <label>Icône</label>${emojiChips(e.emoji)}
+    <div class="grid2"><div><label for="fD">Date</label><input id="fD" type="date" value="${e.date}"></div><div><label for="fD2">Jusqu'au (facultatif)</label><input id="fD2" type="date" value="${e.dateEnd || ''}"></div></div>
+    <div class="grid2"><div><label for="fS">Début</label><input id="fS" type="time" value="${e.start || ''}"></div><div><label for="fEn">Fin</label><input id="fEn" type="time" value="${e.end || ''}"></div></div>
+    <p class="hint">Sans heure de début : toute la journée.</p>
+    <label for="fL">Lieu</label><input id="fL" value="${esc(e.place)}">
+    <label for="fN">Note</label><textarea id="fN">${esc(e.note)}</textarea>
+    <button class="btn primary" data-a="save-event" data-id="${e.id || ''}">Enregistrer</button>
+    ${e.id ? `<button class="btn danger" data-a="del" data-id="${e.id}">Supprimer</button>` : ''}`);
+}
+function recForm(it = {}, occDate = '') {
+  const e = it.id ? it : {persons: [], emoji: '⚽', days: [dow(sel)], every: 1, from: today()};
+  sheet(`<h3>${e.id ? 'Activité régulière' : 'Nouvelle activité'} <button class="icon-btn" data-a="close">✕</button></h3>
+    ${occDate ? `<button class="btn soft" style="margin-top:0" data-a="skip" data-id="${e.id}" data-d="${occDate}">🚫 Annuler seulement le ${fmtDay(occDate, {weekday: 'long', day: 'numeric', month: 'long'})}</button>` : ''}
+    <label for="fT">Nom</label><input id="fT" value="${esc(e.title)}" placeholder="Entraînement de foot, marche, académie…">
+    <label>Pour qui</label>${personChips(e.persons)}
+    <label>Icône</label>${emojiChips(e.emoji)}
+    <label>Jours</label><div class="chips" id="fW">${DOWS.map((d, i) => `<button class="chip ${(e.days || []).includes(i + 1) ? 'on' : ''}" data-a="chip" data-v="${i + 1}">${DOWN[i].slice(0, 3)}</button>`).join('')}</div>
+    <label for="fEv">Fréquence</label><select id="fEv"><option value="1">Chaque semaine</option><option value="2" ${e.every === 2 ? 'selected' : ''}>Une semaine sur deux (à partir de la semaine de début)</option></select>
+    <div class="grid2"><div><label for="fS">Début</label><input id="fS" type="time" value="${e.start || ''}"></div><div><label for="fEn">Fin</label><input id="fEn" type="time" value="${e.end || ''}"></div></div>
+    <div class="grid2"><div><label for="fD">À partir du</label><input id="fD" type="date" value="${e.from || ''}"></div><div><label for="fD2">Jusqu'au</label><input id="fD2" type="date" value="${e.until || ''}"></div></div>
+    <p class="hint">Laisse « Jusqu'au » vide si ça continue. Pour une saison scolaire : jusqu'au 30 juin.</p>
+    <label for="fL">Lieu</label><input id="fL" value="${esc(e.place)}">
+    <label class="check"><input type="checkbox" id="fWk" ${e.work ? 'checked' : ''}> C'est un horaire de travail (compte pour savoir qui est disponible)</label>
+    ${(e.skip || []).length ? `<p class="hint">Jours annulés : ${e.skip.sort().map(d => fmtDay(d, {day: 'numeric', month: 'short'})).join(', ')} <button class="chip" data-a="unskip" data-id="${e.id}">Rétablir</button></p>` : ''}
+    <button class="btn primary" data-a="save-rec" data-id="${e.id || ''}">Enregistrer</button>
+    ${e.id ? `<button class="btn danger" data-a="del" data-id="${e.id}">Supprimer l'activité (tous les jours)</button>` : ''}`);
+}
+function bdayForm(it = {}) {
+  const e = it.id ? it : {persons: []};
+  sheet(`<h3>${e.id ? 'Anniversaire' : 'Nouvel anniversaire'} <button class="icon-btn" data-a="close">✕</button></h3>
+    <label for="fT">Prénom</label><input id="fT" value="${esc(e.title)}" placeholder="Mamy, Lucas (copain de classe)…">
+    <label for="fD">Date de naissance (ou date dans n'importe quelle année)</label><input id="fD" type="date" value="${e.date || ''}">
+    <label class="check"><input type="checkbox" id="fY" ${e.year === false ? '' : 'checked'}> L'année est la vraie (afficher l'âge)</label>
+    <label>Concerne (facultatif, pour le filtre)</label>${personChips(e.persons)}
+    <button class="btn primary" data-a="save-bday" data-id="${e.id || ''}">Enregistrer</button>
+    ${e.id ? `<button class="btn danger" data-a="del" data-id="${e.id}">Supprimer</button>` : ''}`);
+}
+function shiftForm(it = {}) {
+  const e = it.id ? it : {date: sel, person: adults()[1]?.id || persons()[0]?.id};
+  sheet(`<h3>${e.id ? 'Prestation' : 'Nouvelle prestation'} <button class="icon-btn" data-a="close">✕</button></h3>
+    <label for="fPs">Qui</label>${personSelect('fPs', e.person)}
+    <div class="grid2"><div><label for="fD">Date</label><input id="fD" type="date" value="${e.date}"></div><div><label for="fC">Code</label><input id="fC" value="${esc(e.code)}" placeholder="M, S, N…" data-c="code"></div></div>
+    <div class="grid2"><div><label for="fS">Début</label><input id="fS" type="time" value="${e.start || ''}"></div><div><label for="fEn">Fin</label><input id="fEn" type="time" value="${e.end || ''}"></div></div>
+    <div class="grid2"><div><label for="fS2">Reprise (coupé)</label><input id="fS2" type="time" value="${e.start2 || ''}"></div><div><label for="fE2">Fin</label><input id="fE2" type="time" value="${e.end2 || ''}"></div></div>
+    <label for="fLb">Libellé</label><input id="fLb" value="${esc(e.label)}" placeholder="Matin, Soir, Nuit…">
+    <label class="check"><input type="checkbox" id="fOff" ${e.off ? 'checked' : ''}> Jour de repos / congé</label>
+    <button class="btn primary" data-a="save-shift" data-id="${e.id || ''}">Enregistrer</button>
+    ${e.id ? `<button class="btn danger" data-a="del" data-id="${e.id}">Supprimer</button>` : ''}`);
+}
+function personForm(p = {}) {
+  const e = p.id ? p : {emoji: '🧒', color: COLORS[persons().length % COLORS.length], adult: false};
+  const codes = Object.entries(e.codes || {});
+  sheet(`<h3>${e.id ? esc(e.name) : 'Nouvelle personne'} <button class="icon-btn" data-a="close">✕</button></h3>
+    <label for="fT">Prénom</label><input id="fT" value="${esc(e.name)}">
+    <div class="grid2"><div><label for="fEm">Emoji</label><input id="fEm" value="${esc(e.emoji)}"></div><div><label for="fCo">Couleur</label><input id="fCo" type="color" value="${e.color}"></div></div>
+    <label class="check"><input type="checkbox" id="fAd" ${e.adult ? 'checked' : ''}> Adulte (parent)</label>
+    <label for="fAl">Nom tel qu'écrit sur l'horaire de travail</label><input id="fAl" value="${esc(e.alias)}" placeholder="ex. MEERE S. ou prénom">
+    <p class="hint">Utile quand la feuille contient toute l'équipe : Claude cherche cette ligne.</p>
+    ${codes.length ? `<label>Codes appris</label><div class="muted">${codes.map(([k, c]) => `<b>${esc(k)}</b> ${c.off ? 'repos' : esc((c.start || '?') + '–' + (c.end || '?'))}${c.label ? ' ' + esc(c.label) : ''}`).join(' · ')}</div>
+      <button class="btn" data-a="codes-reset" data-id="${e.id}">Oublier ces codes</button>` : ''}
+    <button class="btn primary" data-a="save-person" data-id="${e.id || ''}">Enregistrer</button>
+    ${e.id && persons().length > 1 ? `<button class="btn danger" data-a="del-person" data-id="${e.id}">Retirer ${esc(e.name)}</button>` : ''}`);
+}
+function feedForm(f = {}) {
+  const e = f.id ? f : {emoji: '⚽', name: 'Foot (Twizzit)'};
+  sheet(`<h3>${e.id ? 'Agenda relié' : 'Relier un agenda'} <button class="icon-btn" data-a="close">✕</button></h3>
+    <label for="fT">Nom</label><input id="fT" value="${esc(e.name)}">
+    <label for="fU">Lien iCal</label><input id="fU" value="${esc(e.url)}" placeholder="webcal://… ou https://…" autocapitalize="off" autocorrect="off">
+    <label for="fPs">Pour qui</label>${personSelect('fPs', e.person, true)}
+    <label>Icône</label>${emojiChips(e.emoji)}
+    <p class="hint">Le lien reste dans ton dépôt privé. Il donne accès à l'agenda : ne le partage pas.</p>
+    <button class="btn primary" data-a="save-feed" data-id="${e.id || ''}">Enregistrer</button>
+    ${e.id ? `<button class="btn danger" data-a="del-feed" data-id="${e.id}">Retirer cet agenda</button>` : ''}`);
+}
+function extSheet(o) {
+  const e = o.ext;
+  sheet(`<h3>${esc(o.emoji)} ${esc(e.title)} <button class="icon-btn" data-a="close">✕</button></h3>
+    <p><b>${cap(fmtDay(o.date))}</b><br>${e.allDay ? 'Toute la journée' : esc(e.start.slice(11, 16) + (e.end ? ' – ' + e.end.slice(11, 16) : ''))}</p>
+    ${e.cancelled ? '<p class="flag">Annulé dans Twizzit</p>' : ''}
+    ${e.place ? `<p>📍 ${esc(e.place)}</p>` : ''}${e.desc ? `<p class="muted" style="white-space:pre-wrap">${esc(e.desc.slice(0, 800))}</p>` : ''}
+    <p class="hint">Vient de l'agenda « ${esc(o.feed.name)} ». Pour le modifier, passe par Twizzit.</p>`);
+}
+
+/* ---------- lecture d'un horaire par Claude ---------- */
+let imp = null;
+function importForm() {
+  const def = adults().find(p => p.id !== 'papa') || persons()[0];
+  const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
+  sheet(`<h3>Importer un horaire <button class="icon-btn" data-a="close">✕</button></h3>
+    <label for="iP">Horaire de</label>${personSelect('iP', imp?.person || def?.id)}
+    <label for="iM">Mois concerné (aide si la feuille n'indique pas l'année)</label>
+    <input id="iM" type="month" value="${imp?.month || nm.toISOString().slice(0, 7)}">
+    <div class="grid2"><button class="btn primary" data-a="pick-pdf">📄 PDF ou image</button><button class="btn soft" data-a="pick-cam">📷 Photo</button></div>
+    <p class="hint">Claude lit la feuille et te montre chaque jour avant d'enregistrer. Les codes (M, S, N…) sont retenus pour les prochaines fois.</p>
+    ${!cfg.apiKey ? '<p class="flag">Ajoute d\'abord ta clé Claude dans ⚙️.</p>' : ''}`);
+}
+const fileB64 = f => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = ko; r.readAsDataURL(f); });
+async function imageB64(f) {
+  const img = await createImageBitmap(f), max = 2200, k = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', .88).split(',')[1];
+}
+async function callClaude(content, maxTokens = 8000) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {method: 'POST',
+    headers: {'content-type': 'application/json', 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
+    body: JSON.stringify({model: cfg.model, max_tokens: maxTokens, messages: [{role: 'user', content}]})});
+  if (!res.ok) {
+    let msg = res.status === 401 ? 'Clé API invalide.' : res.status === 429 ? 'Trop de requêtes, réessaie dans un instant.' : `Erreur API (${res.status}).`;
+    try { const j = await res.json(); if (j.error?.message) msg += ' ' + j.error.message; } catch (e) {}
+    throw new Error(msg);
+  }
+  const j = await res.json();
+  const txt = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+  const m = txt.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('La réponse n\'a pas pu être lue.');
+  return JSON.parse(m[0]);
+}
+async function readSchedule(file) {
+  const pid = val('iP'), mon = val('iM'), p = person(pid);
+  if (!cfg.apiKey) return toast('Ajoute ta clé Claude dans les réglages.');
+  imp = {person: pid, month: mon};
+  loading(true, 'Claude lit l\'horaire… (20 à 60 secondes)');
+  try {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    const doc = isPdf ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: await fileB64(file)}}
+      : {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: await imageB64(file)}};
+    const names = [p.alias, p.name].filter(Boolean).join(' / ');
+    const text = `Ce document est un horaire de travail (probablement un hôpital belge : horaire d'infirmière).
+Personne à extraire : « ${names} ». Si le document contient plusieurs personnes (tableau d'équipe), utilise UNIQUEMENT la ligne ou colonne de cette personne (nom de famille, prénom ou initiales). Si tu n'es pas sûr de la ligne, dis-le dans "remarques".
+Mois indiqué par l'utilisateur : ${mon || 'inconnu'} (sers-t'en pour l'année et le mois si le document ne les précise pas). Le document peut couvrir plusieurs semaines ou mois : prends tout.
+Codes déjà connus pour cette personne : ${JSON.stringify(p.codes || {})}
+Pour chaque jour : le code tel qu'écrit ; les heures de début et de fin (HH:MM, 24 h) d'après le document, sa légende ou les codes connus ; si horaire coupé, la 2e partie dans debut2/fin2 ; off=true pour repos, congé, récupération, jour férié non presté, maladie, formation hors service seulement si indiqué comme tel. Un libellé court en français (Matin, Après-midi, Soir, Nuit, Jour, Repos, Congé…). Si une heure est inconnue, laisse "".
+Réponds UNIQUEMENT avec ce JSON :
+{"personne_trouvee":"nom exact lu sur le document","legende":{"CODE":{"debut":"07:00","fin":"15:30","libelle":"Matin","off":false}},"jours":[{"date":"AAAA-MM-JJ","code":"M","debut":"07:00","fin":"15:30","debut2":"","fin2":"","libelle":"Matin","off":false}],"remarques":""}`;
+    const r = await callClaude([doc, {type: 'text', text}]);
+    const days = (r.jours || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.date)).map(d => ({
+      date: d.date, code: String(d.code || '').slice(0, 8), start: normTime(d.debut), end: normTime(d.fin), start2: normTime(d.debut2), end2: normTime(d.fin2),
+      label: String(d.libelle || '').slice(0, 30), off: !!d.off, on: true}));
+    if (!days.length) throw new Error('Aucun jour trouvé sur ce document. ' + (r.remarques || ''));
+    days.sort((a, b) => a.date.localeCompare(b.date));
+    Object.assign(imp, {days, legend: r.legende || {}, found: r.personne_trouvee || '', note: r.remarques || ''});
+    loading(false); reviewImport();
+  } catch (err) { loading(false); toast(err.message || 'Lecture impossible.'); }
+}
+function reviewImport() {
+  const p = person(imp.person), existing = live(state.items).filter(i => i.kind === 'shift' && i.person === imp.person && imp.days.some(d => d.date === i.date)).length;
+  sheet(`<h3>Vérifie l'horaire <button class="icon-btn" data-a="close">✕</button></h3>
+    <div class="found">👤 Ligne lue : <b>${esc(imp.found || '?')}</b> → ${esc(p.emoji)} ${esc(p.name)}<br>📅 ${cap(fmtDay(imp.days[0].date, {day: 'numeric', month: 'long'}))} → ${fmtDay(imp.days.at(-1).date, {day: 'numeric', month: 'long', year: 'numeric'})} · ${imp.days.length} jours
+      ${imp.note ? `<br>💬 ${esc(imp.note)}` : ''}</div>
+    ${existing ? `<p class="hint">${existing} prestation(s) déjà enregistrée(s) sur ces dates seront remplacées.</p>` : ''}
+    <div id="rvList">${imp.days.map((d, i) => `<div class="rv ${d.off ? 'off' : ''}"><input type="checkbox" data-c="rv-on" data-i="${i}" ${d.on ? 'checked' : ''}>
+      <div><b>${cap(fmtDay(d.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</b> <span class="muted">${esc(d.label)}${d.off ? ' · repos' : ''}</span>
+      <div class="g3"><input data-c="rv" data-i="${i}" data-k="code" value="${esc(d.code)}" placeholder="code"><input data-c="rv" data-i="${i}" data-k="start" type="time" value="${d.start}"><input data-c="rv" data-i="${i}" data-k="end" type="time" value="${d.end}"></div>
+      ${d.start2 ? `<div class="sub">Coupé : ${d.start2}–${d.end2}</div>` : ''}</div></div>`).join('')}</div>
+    <button class="btn primary" data-a="imp-save">Enregistrer ${imp.days.length} jours</button>
+    <button class="btn" data-a="import">↺ Recommencer avec un autre fichier</button>`);
+}
+function saveImport() {
+  const days = imp.days.filter(d => d.on), dates = new Set(days.map(d => d.date)), p = person(imp.person);
+  state.items.forEach(i => { if (!i.del && i.kind === 'shift' && i.person === imp.person && dates.has(i.date)) { i.del = true; touch(i); } });
+  days.forEach(d => state.items.push(touch({id: uid(), kind: 'shift', person: imp.person, date: d.date, code: d.code, start: d.start, end: d.end,
+    start2: d.start2, end2: d.end2, label: d.label, off: d.off})));
+  // mémorise la légende (et les heures corrigées) pour les prochains horaires
+  const codes = {...(p.codes || {})};
+  Object.entries(imp.legend || {}).forEach(([k, c]) => { if (k) codes[k] = {start: normTime(c.debut), end: normTime(c.fin), label: c.libelle || '', off: !!c.off}; });
+  days.forEach(d => { if (d.code && (d.start || d.off)) codes[d.code] = {start: d.start, end: d.end, label: d.label, off: d.off}; });
+  p.codes = codes; touch(p);
+  save(); closeSheet(); sel = days[0]?.date || sel; month = sel.slice(0, 7); render();
+  toast(`${days.length} jours enregistrés ✓`); imp = null;
+}
+
+/* ---------- fichiers iCal ---------- */
+function parseICS(text) {
+  const lines = text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').split(/\r?\n/);
+  const unesc = s => s.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1');
+  const conv = (v, params) => {
+    if (/VALUE=DATE(?!-)/.test(params) || /^\d{8}$/.test(v)) return {d: `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}`, allDay: true};
+    const m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/); if (!m) return null;
+    if (v.endsWith('Z')) {
+      const dt = new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]));
+      return {d: dt.toLocaleString('sv-SE', {timeZone: 'Europe/Brussels'}).slice(0, 16).replace(' ', 'T'), allDay: false};
+    }
+    return {d: `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`, allDay: false};
+  };
+  const evs = []; let cur = null;
+  for (const l of lines) {
+    if (l === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (l === 'END:VEVENT') { if (cur?.start) evs.push(cur); cur = null; continue; }
+    if (!cur) continue;
+    const i = l.indexOf(':'); if (i < 0) continue;
+    const head = l.slice(0, i), v = l.slice(i + 1), [name, ...ps] = head.split(';'), params = ps.join(';');
+    if (name === 'UID') cur.uid = v;
+    else if (name === 'SUMMARY') cur.title = unesc(v);
+    else if (name === 'LOCATION') cur.place = unesc(v);
+    else if (name === 'DESCRIPTION') cur.desc = unesc(v).slice(0, 1000);
+    else if (name === 'STATUS') cur.cancelled = /CANCELLED/i.test(v);
+    else if (name === 'DTSTART') { const c = conv(v, params); if (c) { cur.start = c.d; cur.allDay = c.allDay; } }
+    else if (name === 'DTEND') { const c = conv(v, params); if (c) cur.end = c.d; }
+  }
+  return evs.map(e => ({uid: e.uid || e.start + e.title, title: e.title || '(sans titre)', start: e.start, end: e.end || '', allDay: !!e.allDay,
+    place: e.place || '', desc: e.desc || '', ...(e.cancelled ? {cancelled: true} : {})}));
+}
+async function importICSFile(file) {
+  const evs = parseICS(await file.text()).filter(e => (e.end || e.start).slice(0, 10) >= addDays(today(), -30));
+  if (!evs.length) return toast('Aucun événement à venir dans ce fichier.');
+  const known = new Set(live(state.items).map(i => i.src).filter(Boolean));
+  let n = 0;
+  for (const e of evs) {
+    if (known.has(e.uid)) continue;
+    let dateEnd = e.end ? e.end.slice(0, 10) : '';
+    if (e.allDay && dateEnd) dateEnd = addDays(dateEnd, -1); // DTEND exclusif
+    state.items.push(touch({id: uid(), kind: 'event', src: e.uid, title: e.title, date: e.start.slice(0, 10), dateEnd: dateEnd > e.start.slice(0, 10) ? dateEnd : '',
+      start: e.allDay ? '' : e.start.slice(11, 16), end: e.allDay || !e.end ? '' : e.end.slice(11, 16), place: e.place, note: e.desc, persons: [], emoji: '📅'}));
+    n++;
+  }
+  save(); render(); toast(n ? `${n} événement(s) importé(s) ✓` : 'Tout était déjà importé.');
+}
+function exportICS() {
+  const who = picked('expP'); if (!who.length) return toast('Choisis au moins une personne.');
+  const from = today(), to = addDays(from, 122), stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z';
+  const e = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  const dt = (d, t) => d.replace(/-/g, '') + (t ? 'T' + t.replace(':', '') + '00' : '');
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Planning Famille//FR', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:Planning Famille'];
+  for (const o of occurrences(from, to)) {
+    if (o.off || o.cancelled || (o.persons.length && !o.persons.some(p => who.includes(p)))) continue;
+    const names = o.persons.map(p => person(p)?.name).filter(Boolean).join(', ');
+    const segs = o.start ? [[o.start, o.end], ...(o.start2 ? [[o.start2, o.end2]] : [])] : [['', '']];
+    segs.forEach(([s, en], k) => {
+      L.push('BEGIN:VEVENT', `UID:${(o.item?.id || o.ext?.uid || '').replace(/[^\w.-]/g, '')}-${o.date}-${k}@planning-famille`, `DTSTAMP:${stamp}`);
+      if (!s) L.push(`DTSTART;VALUE=DATE:${dt(o.date)}`, `DTEND;VALUE=DATE:${dt(addDays(o.date, 1))}`);
+      else { const endD = en && en <= s ? addDays(o.date, 1) : o.date; L.push(`DTSTART:${dt(o.date, s)}`, `DTEND:${dt(endD, en || s)}`); }
+      L.push(`SUMMARY:${e(`${o.emoji} ${o.title}${names && o.kind !== 'bday' ? ' — ' + names : ''}`)}`);
+      if (o.sub) L.push(`LOCATION:${e(o.sub)}`);
+      L.push('END:VEVENT');
+    });
+  }
+  L.push('END:VCALENDAR');
+  const file = new File([L.join('\r\n')], 'planning-famille.ics', {type: 'text/calendar'});
+  if (navigator.canShare?.({files: [file]})) navigator.share({files: [file], title: 'Planning Famille'}).catch(() => {});
+  else { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+}
+
+/* ---------- synchronisation avec le dépôt privé ---------- */
+function gh(path, opt = {}) {
+  return fetch(`${GH_API}/repos/${cfg.ghRepo}${path}`, {cache: 'no-store', ...opt,
+    headers: {Authorization: `Bearer ${cfg.ghToken}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', ...(opt.headers || {})}});
+}
+const b64utf8 = str => { const b = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+const utf8b64 = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g, '')), c => c.charCodeAt(0)));
+function mergeArr(a = [], b = []) {
+  const m = new Map();
+  [...a, ...b].forEach(x => { const o = m.get(x.id); if (!o || (x.upd || 0) > (o.upd || 0)) m.set(x.id, x); });
+  const old = Date.now() - 180 * 864e5;
+  return [...m.values()].filter(x => !(x.del && (x.upd || 0) < old)).sort((x, y) => x.id.localeCompare(y.id));
+}
+const core = s => JSON.stringify({persons: s.persons, items: s.items, feeds: s.feeds});
+let syncing = false, syncT = null;
+function scheduleSync() { if (!cfg.ghRepo || !cfg.ghToken) return; clearTimeout(syncT); syncT = setTimeout(() => syncNow().catch(e => console.warn(e)), 4000); }
+async function syncNow(manual = false) {
+  if (!cfg.ghRepo || !cfg.ghToken) { if (manual) toast('Configure la synchronisation dans les réglages.'); return; }
+  if (syncing) return; syncing = true;
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const g = await gh(`/contents/${FILE}`);
+      if (g.status === 401) throw new Error('Jeton GitHub invalide ou expiré.');
+      if (!g.ok && g.status !== 404) throw new Error(`Erreur GitHub (${g.status}).`);
+      let remote = null, sha;
+      if (g.ok) { const j = await g.json(); sha = j.sha; try { remote = JSON.parse(utf8b64(j.content)); } catch (e) {} }
+      const merged = {persons: mergeArr(state.persons, remote?.persons), items: mergeArr(state.items, remote?.items), feeds: mergeArr(state.feeds, remote?.feeds)};
+      state = {...state, ...merged}; localStorage.setItem(STORE, JSON.stringify(state));
+      if (cfg.readOnly || (remote && core(remote) === core(merged))) break;
+      const r = await gh(`/contents/${FILE}`, {method: 'PUT', body: JSON.stringify({message: 'planning : mise à jour', content: b64utf8(JSON.stringify({v: 1, updated: new Date().toISOString(), ...merged}, null, 1)), ...(sha ? {sha} : {})})});
+      if (r.ok) break;
+      if (r.status === 403 || (r.status === 404 && g.ok)) { cfg.readOnly = true; persistCfg(); if (manual) toast('Ce jeton ne permet que la lecture : les changements restent sur ce téléphone.'); break; }
+      if (r.status === 404) throw new Error('Dépôt introuvable : vérifie son nom et les droits du jeton.');
+      if (r.status !== 409 && r.status !== 422) throw new Error(`Enregistrement impossible (GitHub ${r.status}).`);
+      await sleep(1200);
+    }
+    const x = await gh(`/contents/${EXT_FILE}`, {headers: {Accept: 'application/vnd.github.raw+json'}});
+    if (x.ok) { ext = await x.json(); localStorage.setItem(CACHE_EXT, JSON.stringify(ext)); }
+    cfg.lastSync = new Date().toISOString(); persistCfg();
+    if (!$('#layer').innerHTML) render();
+    if (manual) toast('Planning à jour ✓');
+  } catch (err) { if (manual) toast(err.message); else console.warn(err); }
+  finally { syncing = false; }
+}
+async function askRobot() {
+  const r = await gh('/issues', {method: 'POST', body: JSON.stringify({title: 'planning synchro', body: 'Demande envoyée par l\'app Planning.'})});
+  if (!r.ok) return toast(r.status === 403 ? 'Ce jeton ne peut pas créer d\'issue : la mise à jour se fera d\'elle-même dans les 6 heures.' : `Demande impossible (GitHub ${r.status}).`);
+  toast('Le robot lit les agendas… (environ 1 minute)');
+  for (let i = 0; i < 9; i++) { await sleep(15000); const before = ext.updated; await syncNow(); if (ext.updated !== before) { render(); return toast('Agendas mis à jour ✓'); } }
+}
+const makeCode = (o) => 'PL1-' + btoa(JSON.stringify(o));
+function applyCode(code) {
+  try {
+    const j = JSON.parse(atob(String(code).trim().replace(/^PL1-/, '')));
+    if (!j.r || !j.t) throw 0;
+    cfg.ghRepo = j.r; cfg.ghToken = j.t; if (j.k) cfg.apiKey = j.k; cfg.readOnly = false; persistCfg();
+    toast('Code accepté, synchronisation…'); syncNow(true).then(render); return true;
+  } catch (e) { toast('Code invalide.'); return false; }
+}
+
+/* ---------- actions ---------- */
+function openOcc(o) {
+  if (o.kind === 'ext') return extSheet(o);
+  const it = o.item;
+  if (it.kind === 'rec') return recForm(it, o.date);
+  if (it.kind === 'event') return eventForm(it);
+  if (it.kind === 'bday') return bdayForm(it);
+  if (it.kind === 'shift') return shiftForm(it);
+}
+const findItem = id => state.items.find(i => i.id === id);
+function upsert(id, data) {
+  const it = id ? findItem(id) : null;
+  if (it) Object.assign(it, data), touch(it); else state.items.push(touch({id: uid(), ...data}));
+  save(); closeSheet(); render();
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]'); if (!el) return;
+  const a = el.dataset.a, id = el.dataset.id;
+  if (a === 'bg') { if (e.target === el) closeSheet(); return; }
+  if (a === 'close') return closeSheet();
+  if (a === 'fab') return addMenu();
+  if (a === 'settings') { view = {name: 'settings'}; render(); scrollTo(0, 0); return; }
+  if (a === 'back') { view = {name: 'home'}; render(); return; }
+  if (a === 'sync') return syncNow(true);
+  if (a === 'mprev' || a === 'mnext') { const d = pd(month + '-15'); d.setMonth(d.getMonth() + (a === 'mnext' ? 1 : -1)); month = iso(d).slice(0, 7); return render(); }
+  if (a === 'day') { sel = el.dataset.d; if (sel.slice(0, 7) !== month) month = sel.slice(0, 7); return render(); }
+  if (a === 'gotoday') { sel = today(); month = sel.slice(0, 7); return render(); }
+  if (a === 'filter') { const p = el.dataset.p; cfg.hidden = cfg.hidden.includes(p) ? cfg.hidden.filter(x => x !== p) : [...cfg.hidden, p]; persistCfg(); return render(); }
+  if (a === 'occ') return openOcc(lastOcc[+el.dataset.i]);
+  if (a === 'chip') return el.classList.toggle('on');
+  if (a === 'emo') { el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('on')); el.classList.add('on'); return; }
+  if (a === 'new-event') return eventForm();
+  if (a === 'new-rec') return recForm();
+  if (a === 'new-bday') return bdayForm();
+  if (a === 'new-shift') return shiftForm();
+  if (a === 'import') return importForm();
+  if (a === 'pick-pdf') return $('#schedIn').click();
+  if (a === 'pick-cam') return $('#camIn').click();
+  if (a === 'imp-save') return saveImport();
+  if (a === 'save-event') {
+    const t = val('fT'), d = val('fD'); if (!t || !d) return toast('Titre et date obligatoires.');
+    return upsert(id, {kind: 'event', title: t, persons: picked('fP'), emoji: picked('fE')[0] || '📅', date: d, dateEnd: val('fD2') > d ? val('fD2') : '',
+      start: val('fS'), end: val('fEn'), place: val('fL'), note: val('fN')});
+  }
+  if (a === 'save-rec') {
+    const t = val('fT'), days = picked('fW').map(Number); if (!t || !days.length) return toast('Nom et au moins un jour obligatoires.');
+    const old = id ? findItem(id) : null;
+    return upsert(id, {kind: 'rec', title: t, persons: picked('fP'), emoji: picked('fE')[0] || '🔁', days, every: +val('fEv') || 1, start: val('fS'), end: val('fEn'),
+      from: val('fD'), until: val('fD2'), place: val('fL'), work: $('#fWk').checked, skip: old?.skip || []});
+  }
+  if (a === 'save-bday') {
+    const t = val('fT'), d = val('fD'); if (!t || !d) return toast('Prénom et date obligatoires.');
+    return upsert(id, {kind: 'bday', title: t, date: d, year: $('#fY').checked ? undefined : false, persons: picked('fP')});
+  }
+  if (a === 'save-shift') {
+    const d = val('fD'); if (!d) return toast('Date obligatoire.');
+    return upsert(id, {kind: 'shift', person: val('fPs'), date: d, code: val('fC'), start: val('fS'), end: val('fEn'), start2: val('fS2'), end2: val('fE2'), label: val('fLb'), off: $('#fOff').checked});
+  }
+  if (a === 'skip') { const it = findItem(id); it.skip = [...new Set([...(it.skip || []), el.dataset.d])]; touch(it); save(); closeSheet(); render(); return toast('Annulé pour ce jour-là'); }
+  if (a === 'unskip') { const it = findItem(id); it.skip = []; touch(it); save(); return recForm(it); }
+  if (a === 'del') { if (!confirm('Supprimer ?')) return; const it = findItem(id); it.del = true; touch(it); save(); closeSheet(); return render(); }
+  if (a === 'person' || a === 'person-new') return personForm(a === 'person' ? person(id) : {});
+  if (a === 'save-person') {
+    const n = val('fT'); if (!n) return toast('Prénom obligatoire.');
+    const data = {name: n, emoji: val('fEm') || '🙂', color: val('fCo'), adult: $('#fAd').checked, alias: val('fAl')};
+    const p = id ? person(id) : null;
+    if (p) Object.assign(p, data), touch(p); else state.persons.push(touch({id: uid(), codes: {}, ...data}));
+    save(); closeSheet(); return render();
+  }
+  if (a === 'codes-reset') { const p = person(id); p.codes = {}; touch(p); save(); return personForm(p); }
+  if (a === 'del-person') { if (!confirm('Retirer cette personne ? Ses activités restent mais sans couleur.')) return; const p = person(id); p.del = true; touch(p); save(); closeSheet(); return render(); }
+  if (a === 'feed' || a === 'feed-new') return feedForm(a === 'feed' ? state.feeds.find(f => f.id === id) : {});
+  if (a === 'save-feed') {
+    const url = val('fU').replace(/^webcals?:\/\//i, 'https://');
+    if (!/^https:\/\/\S+$/i.test(url)) return toast('Colle le lien iCal complet (webcal:// ou https://).');
+    const data = {name: val('fT') || 'Agenda', url, person: val('fPs'), emoji: picked('fE')[0] || '⚽'};
+    const f = id ? state.feeds.find(x => x.id === id) : null;
+    if (f) Object.assign(f, data), touch(f); else state.feeds.push(touch({id: uid(), ...data}));
+    save(); closeSheet(); render();
+    clearTimeout(syncT); syncNow().then(askRobot); return;
+  }
+  if (a === 'del-feed') { if (!confirm('Retirer cet agenda ?')) return; const f = state.feeds.find(x => x.id === id); f.del = true; touch(f); save(); closeSheet(); return render(); }
+  if (a === 'feed-refresh') return askRobot();
+  if (a === 'ics-file') return $('#icsIn').click();
+  if (a === 'code-apply') { if (applyCode(val('code'))) { view = {name: 'home'}; render(); } return; }
+  if (a === 'cfg-save') {
+    Object.assign(cfg, {ghRepo: val('repo').replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''), ghToken: val('tok'), apiKey: val('key'), model: val('model'), readOnly: false});
+    persistCfg(); toast('Réglages enregistrés'); return syncNow(true).then(render);
+  }
+  if (a === 'share-code') {
+    const t = val('stok'); if (!t) return toast('Colle d\'abord le jeton créé pour son téléphone.');
+    const c = makeCode({r: cfg.ghRepo, t, ...($('#skey').checked && cfg.apiKey ? {k: cfg.apiKey} : {})});
+    $('#sout').innerHTML = `<label>Son code</label><input readonly value="${esc(c)}"><button class="btn" data-a="copy" data-v="${esc(c)}">📋 Copier</button>
+      <p class="hint">Sur son iPhone : ouvre ${esc(location.href.split('#')[0])} dans Safari → Partager → « Sur l'écran d'accueil », puis ⚙️ → coller le code. Envoie-le par un canal privé.</p>`;
+    return;
+  }
+  if (a === 'copy') { navigator.clipboard?.writeText(el.dataset.v).then(() => toast('Copié ✓'), () => toast('Copie impossible : sélectionne le texte.')); return; }
+  if (a === 'export') return exportICS();
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.c === 'rv-on') { imp.days[+el.dataset.i].on = el.checked; return; }
+  if (el.dataset.c === 'rv') { const d = imp.days[+el.dataset.i], k = el.dataset.k; d[k] = el.value.trim(); if (k === 'code') { const c = person(imp.person).codes?.[d.code]; if (c) Object.assign(d, {start: c.start, end: c.end, label: c.label, off: c.off}); reviewImport(); } return; }
+  if (el.dataset.c === 'code') { const c = person(val('fPs'))?.codes?.[el.value.trim()]; if (c) { $('#fS').value = c.start || ''; $('#fEn').value = c.end || ''; $('#fLb').value = c.label || ''; $('#fOff').checked = !!c.off; } }
+});
+$('#schedIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) readSchedule(f); });
+$('#camIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) readSchedule(f); });
+$('#icsIn').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importICSFile(f); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && (!cfg.lastSync || Date.now() - new Date(cfg.lastSync) > 60000)) syncNow(); });
+// lien direct avec un code : …/planning/#PL1-…
+if (/^#PL1-/.test(location.hash)) { applyCode(location.hash.slice(1)); history.replaceState(null, '', location.pathname); }
+
+render();
+syncNow();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
