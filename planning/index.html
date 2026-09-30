@@ -550,6 +550,7 @@ async function readSchedule(file) {
 Personne à extraire : « ${names} ». Si le document contient plusieurs personnes (tableau d'équipe), utilise UNIQUEMENT la ligne ou colonne de cette personne (nom de famille, prénom ou initiales). Si tu n'es pas sûr de la ligne, dis-le dans "remarques".
 Mois indiqué par l'utilisateur : ${mon || 'inconnu'} (sers-t'en pour l'année et le mois si le document ne les précise pas). Le document peut couvrir plusieurs semaines ou mois : prends tout.
 Codes déjà connus pour cette personne : ${JSON.stringify(p.codes || {})}
+Tableau d'équipe (« Planning par période ») : une ligne par personne, une colonne par jour du mois (lettres L M M J V S D et numéros 1 à 31 en en-tête). Lis la ligne de la personne case par case en suivant les numéros de colonnes, sans décaler. Une barre « / » ou une case vide = repos (off=true, code "/"). Une heure imprimée dans la case sous un code (ex. « M-1 » puis « 06:05 », « PM1 » puis « 10:00 ») est l'heure de début de ce jour. Les annotations manuscrites dans la case comptent : recopie-les dans le code.
 Pour chaque jour : le code tel qu'écrit ; les heures de début et de fin (HH:MM, 24 h) d'après le document, sa légende ou les codes connus ; si horaire coupé, la 2e partie dans debut2/fin2 ; off=true pour repos, congé, récupération, jour férié non presté, maladie, formation hors service seulement si indiqué comme tel. Un libellé court en français (Matin, Après-midi, Soir, Nuit, Jour, Repos, Congé…). Si une heure est inconnue, laisse "".
 Réponds UNIQUEMENT avec ce JSON :
 {"personne_trouvee":"nom exact lu sur le document","legende":{"CODE":{"debut":"07:00","fin":"15:30","libelle":"Matin","off":false}},"jours":[{"date":"AAAA-MM-JJ","code":"M","debut":"07:00","fin":"15:30","debut2":"","fin2":"","libelle":"Matin","off":false}],"remarques":""}`;
@@ -565,16 +566,30 @@ Réponds UNIQUEMENT avec ce JSON :
 }
 function reviewImport() {
   const p = person(imp.person), existing = live(state.items).filter(i => i.kind === 'shift' && i.person === imp.person && imp.days.some(d => d.date === i.date)).length;
+  const scroll = $('.sheet')?.scrollTop || 0;
+  // un code = une ligne de légende ; ce qu'on y règle s'applique à tous les jours portant ce code
+  const codes = [...new Set(imp.days.map(d => d.code).filter(Boolean))];
+  const ref = c => imp.days.find(d => d.code === c && (d.start || d.off)) || imp.days.find(d => d.code === c);
+  const missing = imp.days.filter(d => d.on && !d.off && !d.start).length;
   sheet(`<h3>Vérifie l'horaire <button class="icon-btn" data-a="close">✕</button></h3>
     <div class="found">👤 Ligne lue : <b>${esc(imp.found || '?')}</b> → ${esc(p.emoji)} ${esc(p.name)}<br>📅 ${cap(fmtDay(imp.days[0].date, {day: 'numeric', month: 'long'}))} → ${fmtDay(imp.days.at(-1).date, {day: 'numeric', month: 'long', year: 'numeric'})} · ${imp.days.length} jours
       ${imp.note ? `<br>💬 ${esc(imp.note)}` : ''}</div>
     ${existing ? `<p class="hint">${existing} prestation(s) déjà enregistrée(s) sur ces dates seront remplacées.</p>` : ''}
+    <label>Codes trouvés : règle les heures une seule fois, elles s'appliquent à tous les jours et seront retenues</label>
+    <div class="card" style="padding:4px 12px;box-shadow:none;border:1px solid var(--line)">${codes.map(c => { const r = ref(c), n = imp.days.filter(d => d.code === c).length; return `
+      <div class="rv" style="grid-template-columns:1fr"><div><b>${esc(c)}</b> <span class="muted">${n} jour${n > 1 ? 's' : ''}${r.label ? ' · ' + esc(r.label) : ''}</span>
+        <div class="g3" style="grid-template-columns:1fr 1fr 90px"><input type="time" data-c="lg" data-code="${esc(c)}" data-k="start" value="${r.off ? '' : r.start}" ${r.off ? 'disabled' : ''}>
+          <input type="time" data-c="lg" data-code="${esc(c)}" data-k="end" value="${r.off ? '' : r.end}" ${r.off ? 'disabled' : ''}>
+          <label class="check" style="margin:0;font-size:13px"><input type="checkbox" data-c="lg" data-code="${esc(c)}" data-k="off" ${r.off ? 'checked' : ''}> repos</label></div></div></div>`; }).join('')}</div>
+    ${missing ? `<p class="flag">${missing} jour(s) de travail sans heure : complète les codes ci-dessus.</p>` : ''}
+    <label>Jour par jour (décoche un jour pour l'ignorer)</label>
     <div id="rvList">${imp.days.map((d, i) => `<div class="rv ${d.off ? 'off' : ''}"><input type="checkbox" data-c="rv-on" data-i="${i}" ${d.on ? 'checked' : ''}>
       <div><b>${cap(fmtDay(d.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</b> <span class="muted">${esc(d.label)}${d.off ? ' · repos' : ''}</span>
       <div class="g3"><input data-c="rv" data-i="${i}" data-k="code" value="${esc(d.code)}" placeholder="code"><input data-c="rv" data-i="${i}" data-k="start" type="time" value="${d.start}"><input data-c="rv" data-i="${i}" data-k="end" type="time" value="${d.end}"></div>
       ${d.start2 ? `<div class="sub">Coupé : ${d.start2}–${d.end2}</div>` : ''}</div></div>`).join('')}</div>
-    <button class="btn primary" data-a="imp-save">Enregistrer ${imp.days.length} jours</button>
+    <button class="btn primary" data-a="imp-save">Enregistrer ${imp.days.filter(d => d.on).length} jours</button>
     <button class="btn" data-a="import">↺ Recommencer avec un autre fichier</button>`);
+  const sh = $('.sheet'); if (sh) sh.scrollTop = scroll;
 }
 function saveImport() {
   const days = imp.days.filter(d => d.on), dates = new Set(days.map(d => d.date)), p = person(imp.person);
@@ -823,6 +838,11 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset.c === 'rv-on') { imp.days[+el.dataset.i].on = el.checked; return; }
+  if (el.dataset.c === 'lg') {
+    const c = el.dataset.code, k = el.dataset.k;
+    imp.days.filter(d => d.code === c).forEach(d => { if (k === 'off') { d.off = el.checked; if (d.off) { d.start = d.end = d.start2 = d.end2 = ''; } } else d[k] = el.value; });
+    return reviewImport();
+  }
   if (el.dataset.c === 'rv') { const d = imp.days[+el.dataset.i], k = el.dataset.k; d[k] = el.value.trim(); if (k === 'code') { const c = person(imp.person).codes?.[d.code]; if (c) Object.assign(d, {start: c.start, end: c.end, label: c.label, off: c.off}); reviewImport(); } return; }
   if (el.dataset.c === 'code') { const c = person(val('fPs'))?.codes?.[el.value.trim()]; if (c) { $('#fS').value = c.start || ''; $('#fEn').value = c.end || ''; $('#fLb').value = c.label || ''; $('#fOff').checked = !!c.off; } }
 });
