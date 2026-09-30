@@ -558,86 +558,173 @@ async function callClaude(content, maxTokens = 8000) {
   return JSON.parse(m[0]);
 }
 
-/* ---------- recadrage d'une photo (pellicule ou appareil) ---------- */
-let crop = null; // {src: canvas pivoté, r: {x,y,w,h} en fraction de l'image}
+/* ---------- photo : redressement du tableau puis choix de la ligne ---------- */
+// crop = {src, orig, q: 4 coins [x,y] en fraction (HG, HD, BD, BG), warp: canvas redressé, bands: {row, head} en px du redressé, active}
+let crop = null;
 async function openCropper(file) {
   let bmp;
   try { bmp = await createImageBitmap(file); } catch (e) { return toast('Cette image ne peut pas être ouverte.'); }
   const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height; c.getContext('2d').drawImage(bmp, 0, 0);
-  crop = {src: c, orig: c, r: {x: .04, y: .04, w: .92, h: .92}};
-  cropSheet();
+  crop = {src: c, orig: c, q: [[.06, .06], [.94, .06], [.94, .94], [.06, .94]]};
+  quadSheet();
 }
-// Remplace la photo par le cadre choisi, pour affiner les coins de plus près
-function zoomCrop() {
-  const s = crop.src, r = crop.r, c = document.createElement('canvas');
-  const sx = r.x * s.width, sy = r.y * s.height; c.width = Math.round(r.w * s.width); c.height = Math.round(r.h * s.height);
-  c.getContext('2d').drawImage(s, sx, sy, c.width, c.height, 0, 0, c.width, c.height);
-  crop = {...crop, src: c, r: {x: .02, y: .02, w: .96, h: .96}}; cropSheet();
-}
-function cropSheet() {
-  sheet(`<h3>Encadre le tableau <button class="icon-btn" data-a="close">✕</button></h3>
-    <p class="hint" style="margin-top:0">Fais glisser les coins pour garder seulement le tableau : les noms, l'en-tête des jours et toutes les colonnes jusqu'au 31. Glisse au milieu du cadre pour le déplacer.</p>
-    <canvas id="cropC" style="display:block;margin:8px auto 0;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:10px;background:#000"></canvas>
-    <div class="grid2"><button class="btn" data-a="crop-zoom">🔍 Zoomer sur le cadre</button><button class="btn" data-a="crop-rot">↻ Pivoter</button></div>
-    <button class="btn" data-a="crop-all">⬜ Revenir à toute la photo</button>
-    <button class="btn primary" data-a="crop-ok">✅ Lire ce cadre avec Claude</button>`);
-  const cv = $('#cropC'), box = Math.min(cv.parentElement.clientWidth || 340, 528), maxH = innerHeight * .52, dpr = devicePixelRatio || 1;
-  const k = Math.min(box / crop.src.width, maxH / crop.src.height), W = crop.src.width * k, H = crop.src.height * k;
+function fitCanvas(cv, w, h, maxFrac = .5) {
+  const box = Math.min(cv.parentElement.clientWidth || 340, 528), dpr = devicePixelRatio || 1;
+  const k = Math.min(box / w, innerHeight * maxFrac / h), W = w * k, H = h * k;
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
   $('.sheet').style.userSelect = $('.sheet').style.webkitUserSelect = 'none';
-  const ctx = cv.getContext('2d');
+  return cv.getContext('2d');
+}
+const cvStyle = 'display:block;margin:8px auto 0;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:10px;background:#000';
+function quadSheet() {
+  sheet(`<h3>1/2 · Coins du tableau <button class="icon-btn" data-a="close">✕</button></h3>
+    <p class="hint" style="margin-top:0">Place les 4 ronds sur les 4 coins du tableau : <b>en haut à gauche</b> au-dessus de « Nom », <b>en haut à droite</b> après la colonne du 31, et les deux coins du bas. Touche près d'un coin ou fais-le glisser. Le cadre peut être penché : l'app redresse la photo.</p>
+    <canvas id="cropC" style="${cvStyle}"></canvas>
+    <div class="grid2"><button class="btn" data-a="crop-zoom">🔍 Zoomer</button><button class="btn" data-a="crop-rot">↻ Pivoter</button></div>
+    <button class="btn" data-a="crop-all">⬜ Revenir à toute la photo</button>
+    <button class="btn primary" data-a="crop-warp">Suivant : redresser →</button>`);
+  const cv = $('#cropC'), ctx = fitCanvas(cv, crop.src.width, crop.src.height), dpr = devicePixelRatio || 1;
   const draw = () => {
-    const w = cv.width, h = cv.height, r = crop.r;
+    const w = cv.width, h = cv.height, P = crop.q.map(([x, y]) => [x * w, y * h]);
     ctx.drawImage(crop.src, 0, 0, w, h);
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.fillRect(0, 0, w, r.y * h); ctx.fillRect(0, (r.y + r.h) * h, w, h); ctx.fillRect(0, r.y * h, r.x * w, r.h * h); ctx.fillRect((r.x + r.w) * w, r.y * h, w, r.h * h);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * dpr; ctx.strokeRect(r.x * w, r.y * h, r.w * w, r.h * h);
-    ctx.fillStyle = '#818cf8';
-    [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x * w, y * h, 11 * dpr, 0, 7); ctx.fill(); });
+    ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.moveTo(...P[0]); P.slice(1).forEach(p => ctx.lineTo(...p)); ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fill('evenodd');
+    ctx.beginPath(); ctx.moveTo(...P[0]); P.slice(1).forEach(p => ctx.lineTo(...p)); ctx.closePath();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * dpr; ctx.stroke();
+    P.forEach(([x, y], i) => { ctx.beginPath(); ctx.arc(x, y, 12 * dpr, 0, 7); ctx.fillStyle = 'rgba(129,140,248,.85)'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `bold ${10 * dpr}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(['HG', 'HD', 'BD', 'BG'][i], x, y); });
   };
-  let drag = null;
-  const pos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height, b]; };
+  let drag = -1;
+  const pos = e => { const b = cv.getBoundingClientRect(); return [Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)), Math.max(0, Math.min(1, (e.clientY - b.top) / b.height)), b]; };
   cv.onpointerdown = e => {
-    const [x, y, b] = pos(e), r = crop.r, tol = 34 / b.width, toly = 34 / b.height;
-    const corners = [['tl', r.x, r.y], ['tr', r.x + r.w, r.y], ['bl', r.x, r.y + r.h], ['br', r.x + r.w, r.y + r.h]];
-    const hit = corners.find(([, cx, cy]) => Math.abs(cx - x) < tol && Math.abs(cy - y) < toly);
-    drag = hit ? {c: hit[0]} : (x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h) ? {c: 'move', ox: x - r.x, oy: y - r.y} : null;
-    if (drag) cv.setPointerCapture(e.pointerId);
+    const [x, y, b] = pos(e);
+    let best = 0, bd = 1e9; crop.q.forEach(([qx, qy], i) => { const d = Math.hypot((qx - x) * b.width, (qy - y) * b.height); if (d < bd) { bd = d; best = i; } });
+    drag = best; crop.q[drag] = [x, y]; cv.setPointerCapture(e.pointerId); draw();
   };
-  cv.onpointermove = e => {
-    if (!drag) return;
-    let [x, y] = pos(e); x = Math.max(0, Math.min(1, x)); y = Math.max(0, Math.min(1, y));
-    const r = crop.r, min = .05;
-    if (drag.c === 'move') { r.x = Math.max(0, Math.min(1 - r.w, x - drag.ox)); r.y = Math.max(0, Math.min(1 - r.h, y - drag.oy)); }
-    else {
-      let x1 = r.x, y1 = r.y, x2 = r.x + r.w, y2 = r.y + r.h;
-      if (drag.c[1] === 'l') x1 = Math.min(x, x2 - min); else x2 = Math.max(x, x1 + min);
-      if (drag.c[0] === 't') y1 = Math.min(y, y2 - min); else y2 = Math.max(y, y1 + min);
-      Object.assign(r, {x: x1, y: y1, w: x2 - x1, h: y2 - y1});
-    }
-    draw();
-  };
-  cv.onpointerup = cv.onpointercancel = () => { drag = null; };
+  cv.onpointermove = e => { if (drag < 0) return; const [x, y] = pos(e); crop.q[drag] = [x, y]; draw(); };
+  cv.onpointerup = cv.onpointercancel = () => { drag = -1; };
   draw();
+}
+function zoomCrop() {
+  const s = crop.src, xs = crop.q.map(p => p[0]), ys = crop.q.map(p => p[1]), m = .04;
+  const x0 = Math.max(0, Math.min(...xs) - m), y0 = Math.max(0, Math.min(...ys) - m), x1 = Math.min(1, Math.max(...xs) + m), y1 = Math.min(1, Math.max(...ys) + m);
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.round((x1 - x0) * s.width)); c.height = Math.max(1, Math.round((y1 - y0) * s.height));
+  c.getContext('2d').drawImage(s, x0 * s.width, y0 * s.height, c.width, c.height, 0, 0, c.width, c.height);
+  crop.q = crop.q.map(([x, y]) => [(x - x0) / (x1 - x0), (y - y0) / (y1 - y0)]); crop.src = c; quadSheet();
 }
 function rotateCrop() {
   const s = crop.src, c = document.createElement('canvas'); c.width = s.height; c.height = s.width;
   const x = c.getContext('2d'); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(s, 0, 0);
-  const r = crop.r; crop = {...crop, src: c, r: {x: 1 - r.y - r.h, y: r.x, w: r.h, h: r.w}};
-  cropSheet();
+  crop.src = c; crop.q = [[.06, .06], [.94, .06], [.94, .94], [.06, .94]]; quadSheet();
 }
-// Découpe le cadre choisi ; envoie une vue d'ensemble + deux zooms (moitié gauche / moitié droite, même cadrage vertical)
-function cropImages() {
-  const s = crop.src, r = crop.r;
-  const sx = Math.round(r.x * s.width), sy = Math.round(r.y * s.height), sw = Math.round(r.w * s.width), sh = Math.round(r.h * s.height);
-  const part = (x0, w0, max) => {
-    const k = Math.min(1, max / Math.max(w0, sh)), c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(w0 * k)); c.height = Math.max(1, Math.round(sh * k));
-    c.getContext('2d').drawImage(s, sx + x0, sy, w0, sh, 0, 0, c.width, c.height);
-    return {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: c.toDataURL('image/jpeg', .9).split(',')[1]}};
+// Homographie : rectangle W×H → quadrilatère de la photo (résolution d'un système 8×8)
+function homography(dst) {
+  const W = dst.W, H = dst.H, src = [[0, 0], [W, 0], [W, H], [0, H]], A = [], B = [];
+  src.forEach(([u, v], i) => { const [x, y] = dst.p[i];
+    A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]); B.push(x);
+    A.push([0, 0, 0, u, v, 1, -u * y, -v * y]); B.push(y); });
+  for (let c = 0; c < 8; c++) {
+    let piv = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+    [A[c], A[piv]] = [A[piv], A[c]]; [B[c], B[piv]] = [B[piv], B[c]];
+    for (let r = 0; r < 8; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; B[r] -= f * B[c]; }
+  }
+  return B.map((b, i) => b / A[i][i]);
+}
+function warpCrop() {
+  const s = crop.src, P = crop.q.map(([x, y]) => [x * s.width, y * s.height]), d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  let W = Math.max(d(P[0], P[1]), d(P[3], P[2])), H = Math.max(d(P[0], P[3]), d(P[1], P[2]));
+  const k = Math.min(1, 3200 / W, 3200 / H); W = Math.round(W * k); H = Math.round(H * k);
+  if (W < 50 || H < 50) return toast('Les coins sont trop proches : place-les sur les coins du tableau.');
+  const [a, b, c, dd, e, f, g, h] = homography({W, H, p: P});
+  const sd = s.getContext('2d').getImageData(0, 0, s.width, s.height).data, sw = s.width, sh = s.height;
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const oc = out.getContext('2d'), od = oc.createImageData(W, H), o = od.data;
+  for (let v = 0; v < H; v++) for (let u = 0; u < W; u++) {
+    const z = g * u + h * v + 1, x = (a * u + b * v + c) / z, y = (dd * u + e * v + f) / z;
+    const x0 = Math.floor(x), y0 = Math.floor(y), i = (v * W + u) * 4;
+    if (x0 < 0 || y0 < 0 || x0 >= sw - 1 || y0 >= sh - 1) { o[i] = o[i + 1] = o[i + 2] = 255; o[i + 3] = 255; continue; }
+    const fx = x - x0, fy = y - y0, p00 = (y0 * sw + x0) * 4, p10 = p00 + 4, p01 = p00 + sw * 4, p11 = p01 + 4;
+    for (let ch = 0; ch < 3; ch++) o[i + ch] = (sd[p00 + ch] * (1 - fx) + sd[p10 + ch] * fx) * (1 - fy) + (sd[p01 + ch] * (1 - fx) + sd[p11 + ch] * fx) * fy;
+    o[i + 3] = 255;
+  }
+  oc.putImageData(od, 0, 0);
+  crop.warp = out; crop.bands = {}; crop.active = 'row'; crop.bh = Math.round(H / 30);
+  rowsSheet();
+}
+function rowsSheet() {
+  const p = person(imp.person), B = crop.bands, act = crop.active;
+  sheet(`<h3>2/2 · Choisis les lignes <button class="icon-btn" data-a="close">✕</button></h3>
+    <div class="chips"><button class="chip ${act === 'row' ? 'on' : ''}" data-a="band-act" data-v="row" style="${act === 'row' ? 'background:#dc2626' : ''}">🔴 Ligne ${esc(p.alias || p.name)} ${B.row ? '✓' : ''}</button>
+      <button class="chip ${act === 'head' ? 'on' : ''}" data-a="band-act" data-v="head" style="${act === 'head' ? 'background:#2563eb' : ''}">🔵 Numéros des jours ${B.head ? '✓' : ''}</button></div>
+    <p class="hint">${act === 'row' ? `Touche la ligne qui commence par <b>${esc(p.alias || p.name)}</b>.` : 'Touche la ligne des <b>numéros des jours</b> (1, 2, 3… 31).'} Ajuste avec les flèches pour que la bande couvre juste cette ligne.</p>
+    <canvas id="rowC" style="${cvStyle}"></canvas>
+    <div class="grid2" style="grid-template-columns:repeat(4,1fr)"><button class="btn" data-a="band" data-v="up">▲ Monter</button><button class="btn" data-a="band" data-v="down">▼ Descendre</button>
+      <button class="btn" data-a="band" data-v="thin">－ Fin</button><button class="btn" data-a="band" data-v="thick">＋ Épais</button></div>
+    <div class="grid2"><button class="btn" data-a="band" data-v="rup">↗ Côté droit plus haut</button><button class="btn" data-a="band" data-v="rdown">↘ Côté droit plus bas</button></div>
+    <label>Aperçu : début de ligne (le nom) puis fin de ligne (jusqu'au 31). Chaque case doit être sous son numéro.</label><canvas id="prevC" style="display:block;width:100%;border-radius:8px;background:#fff"></canvas>
+    <button class="btn primary" data-a="crop-ok">✅ Lire cette ligne avec Claude</button>
+    <button class="btn" data-a="crop-back">← Replacer les coins</button>`);
+  const w = crop.warp, cv = $('#rowC'), ctx = fitCanvas(cv, w.width, w.height, .42), k = cv.width / w.width;
+  const draw = () => {
+    ctx.drawImage(w, 0, 0, cv.width, cv.height);
+    [['head', '37,99,235'], ['row', '220,38,38']].forEach(([n, col]) => { const b = crop.bands[n]; if (!b) return;
+      const dy = b.dy || 0, W = cv.width;
+      ctx.beginPath(); ctx.moveTo(0, b.y * k); ctx.lineTo(W, (b.y + dy) * k); ctx.lineTo(W, (b.y + dy + b.h) * k); ctx.lineTo(0, (b.y + b.h) * k); ctx.closePath();
+      ctx.fillStyle = `rgba(${col},.22)`; ctx.fill(); ctx.strokeStyle = `rgb(${col})`; ctx.lineWidth = 2; ctx.stroke(); });
+    drawPreview();
   };
-  const half = Math.round(sw * .56);
-  return [part(0, sw, 2000), part(0, half, 1600), part(sw - half, half, 1600)];
+  cv.onpointerdown = e => {
+    const r = cv.getBoundingClientRect(), y = (e.clientY - r.top) / r.height * w.height;
+    const h = crop.bands[crop.active]?.h || crop.bh;
+    const old = crop.bands[crop.active], other = crop.bands[crop.active === 'row' ? 'head' : 'row'];
+    crop.bands[crop.active] = {y: Math.max(0, Math.round(y - h / 2)), h, dy: old ? old.dy || 0 : other?.dy || 0};
+    if (crop.active === 'row' && !crop.bands.head) crop.active = 'head';
+    else if (crop.active === 'head' && !crop.bands.row) crop.active = 'row';
+    rowsSheet();
+  };
+  draw();
+}
+function drawPreview() {
+  const c = $('#prevC'); if (!c) return;
+  const comp = composite(); if (!comp) { c.height = 0; return; }
+  const W = c.clientWidth || 340, dpr = devicePixelRatio || 1;
+  // aperçu : 45 % de gauche puis 45 % de droite, l'un sous l'autre
+  const pw = Math.round(comp.width * .45), sh = Math.round(W * dpr * comp.height / pw), gap = 6 * dpr;
+  c.width = W * dpr; c.height = sh * 2 + gap; c.style.height = c.height / dpr + 'px';
+  const x = c.getContext('2d'); x.fillStyle = '#6366f1'; x.fillRect(0, sh, c.width, gap);
+  x.drawImage(comp, 0, 0, pw, comp.height, 0, 0, c.width, sh);
+  x.drawImage(comp, comp.width - pw, 0, pw, comp.height, 0, sh + gap, c.width, sh);
+}
+// En-tête (bleu) empilé au-dessus de la ligne (rouge), colonnes alignées
+function composite() {
+  const {head, row} = crop.bands, w = crop.warp; if (!row) return null;
+  const parts = [head, row].filter(Boolean), gap = 4, H = parts.reduce((t, b) => t + b.h, 0) + gap * (parts.length - 1);
+  const c = document.createElement('canvas'); c.width = w.width; c.height = H; const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+  // bande inclinée : on la recopie par tranches verticales de 4 px pour la remettre à plat
+  let y = 0; parts.forEach(b => { const dy = b.dy || 0;
+    for (let sx = 0; sx < w.width; sx += 4) { const sw = Math.min(4, w.width - sx), yy = b.y + dy * (sx + sw / 2) / w.width;
+      x.drawImage(w, sx, yy, sw, b.h, sx, y, sw, b.h); }
+    y += b.h + gap; });
+  return c;
+}
+const toBlock = c => ({type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: c.toDataURL('image/jpeg', .92).split(',')[1]}});
+function cropImages() {
+  const w = crop.warp, {row, head} = crop.bands;
+  // 1) vue d'ensemble redressée avec les deux bandes encadrées
+  const k = Math.min(1, 1568 / Math.max(w.width, w.height)), o = document.createElement('canvas');
+  o.width = Math.round(w.width * k); o.height = Math.round(w.height * k); const ox = o.getContext('2d'); ox.drawImage(w, 0, 0, o.width, o.height);
+  ox.lineWidth = 4; [[head, '#2563eb'], [row, '#dc2626']].forEach(([b, col]) => { const dy = b.dy || 0; ox.strokeStyle = col; ox.beginPath();
+    ox.moveTo(2, b.y * k); ox.lineTo(o.width - 2, (b.y + dy) * k); ox.lineTo(o.width - 2, (b.y + dy + b.h) * k); ox.lineTo(2, (b.y + b.h) * k); ox.closePath(); ox.stroke(); });
+  // 2-4) en-tête + ligne, découpés en trois morceaux agrandis
+  const comp = composite(), cuts = [[0, .38], [.31, .69], [.62, 1]];
+  const zooms = cuts.map(([a, b]) => {
+    const x0 = Math.round(a * comp.width), pw = Math.round((b - a) * comp.width), f = Math.min(3, 1500 / pw);
+    const c = document.createElement('canvas'); c.width = Math.round(pw * f); c.height = Math.round(comp.height * f);
+    const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(comp, x0, 0, pw, comp.height, 0, 0, c.width, c.height);
+    return toBlock(c);
+  });
+  return [toBlock(o), ...zooms];
 }
 
 async function readSchedule(source) {
@@ -650,7 +737,7 @@ async function readSchedule(source) {
     if (source instanceof File) blocks = [{type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: await fileB64(source)}}];
     else {
       blocks = source;
-      imgNote = `\nTu reçois 3 images de la MÊME feuille photographiée : 1) vue d'ensemble du tableau ; 2) zoom sur la moitié gauche (colonne des noms et premiers jours) ; 3) zoom sur la moitié droite (derniers jours). Les trois ont exactement le même cadrage vertical : la ligne d'une personne est à la même hauteur relative dans les trois images. Repère la ligne et les numéros de jours sur l'image 1 et 2, puis lis les cases sur les zooms 2 et 3.`;
+      imgNote = `\nLa feuille a été photographiée puis redressée par l'application. Tu reçois 4 images : 1) le tableau entier ; la ligne de la personne, choisie par l'utilisateur, est encadrée en ROUGE, et la ligne des numéros de jours en BLEU. 2), 3), 4) : agrandissements de gauche à droite (avec un léger recouvrement) de ces deux lignes seules, empilées : en haut l'en-tête des jours, en dessous la ligne de la personne ; les colonnes sont parfaitement alignées. Lis UNIQUEMENT la ligne du bas des images 2 à 4, case par case, en prenant le numéro de jour juste au-dessus de chaque case (attention aux recouvrements : ne compte pas deux fois un même jour). Mets dans personne_trouvee le nom écrit au début de cette ligne, même si ce n'est pas la personne attendue.`;
     }
     const names = [p.alias, p.name].filter(Boolean).join(' / ');
     const text = `Ce document est un horaire de travail (probablement un hôpital belge : horaire d'infirmière).${imgNote}
@@ -686,6 +773,8 @@ function reviewImport() {
     <div class="found">👤 Ligne lue : <b>${esc(imp.found || '?')}</b> → ${esc(p.emoji)} ${esc(p.name)}<br>📅 ${cap(fmtDay(imp.days[0].date, {day: 'numeric', month: 'long'}))} → ${fmtDay(imp.days.at(-1).date, {day: 'numeric', month: 'long', year: 'numeric'})} · ${imp.days.length} jours
       ${imp.note ? `<br>💬 ${esc(imp.note)}` : ''}</div>
     ${existing ? `<p class="hint">${existing} prestation(s) déjà enregistrée(s) sur ces dates seront remplacées.</p>` : ''}
+    ${(() => { const want = codeKey((p.alias || p.name).split(/[ ,]/)[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, ''), got = codeKey(imp.found).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return want && got && !got.includes(want) ? `<div class="found" style="background:#fee2e2;color:#991b1b">⛔ <b>Mauvaise ligne ?</b> Claude a lu la ligne « ${esc(imp.found)} », pas « ${esc(p.alias)} ». Touche « Recommencer » et choisis la bonne ligne.</div>` : ''; })()}
     ${bad.length ? `<div class="found" style="background:#fee2e2;color:#991b1b">⚠️ <b>Je n'arrive pas à lire l'horaire de ${bad.length} jour${bad.length > 1 ? 's' : ''}</b> :<br>${bad.map(d => `${fmtDay(d.date, {weekday: 'short', day: 'numeric'})} (code « ${esc(d.code || '?')} »)`).join(', ')}.<br>
       Corrige le code du jour dans la liste plus bas en regardant la feuille, ou indique les heures de ce code ci-dessous (il sera retenu). Sinon, ces jours seront enregistrés avec ⚠️.</div>` : '<div class="found" style="background:#dcfce7;color:#166534">✅ Tous les jours correspondent à un code connu.</div>'}
     <label>Codes de cette feuille (les codes connus sont appliqués automatiquement ; un nouveau code réglé ici est retenu)</label>
@@ -892,9 +981,24 @@ document.addEventListener('click', e => {
     return $(a === 'pick-pdf' ? '#schedIn' : a === 'pick-cam' ? '#camIn' : '#photoIn').click();
   }
   if (a === 'crop-rot') return rotateCrop();
-  if (a === 'crop-all') { crop.src = crop.orig; crop.r = {x: 0, y: 0, w: 1, h: 1}; return cropSheet(); }
+  if (a === 'crop-all') { crop.src = crop.orig; crop.q = [[.06, .06], [.94, .06], [.94, .94], [.06, .94]]; return quadSheet(); }
   if (a === 'crop-zoom') return zoomCrop();
-  if (a === 'crop-ok') return readSchedule(cropImages());
+  if (a === 'crop-warp') { loading(true, 'Redressement de la photo…'); return setTimeout(() => { try { warpCrop(); } finally { loading(false); } }, 30); }
+  if (a === 'crop-back') return quadSheet();
+  if (a === 'band-act') { crop.active = el.dataset.v; return rowsSheet(); }
+  if (a === 'band') {
+    const b = crop.bands[crop.active]; if (!b) return toast('Touche d\'abord la ligne sur la photo.');
+    const v = el.dataset.v, st = Math.max(1, Math.round(b.h * .2));
+    if (v === 'up') b.y = Math.max(0, b.y - st); if (v === 'down') b.y = Math.min(crop.warp.height - b.h, b.y + st);
+    if (v === 'rup') b.dy = (b.dy || 0) - st; if (v === 'rdown') b.dy = (b.dy || 0) + st;
+    if (v === 'thick') { b.y = Math.max(0, b.y - st / 2); b.h = Math.min(crop.warp.height, b.h + st); } if (v === 'thin' && b.h > 8) { b.y += st / 2; b.h -= st; }
+    b.y = Math.round(b.y); b.h = Math.round(b.h); return rowsSheet();
+  }
+  if (a === 'crop-ok') {
+    if (!crop.bands.row) { crop.active = 'row'; rowsSheet(); return toast('Touche la ligne de la personne sur la photo.'); }
+    if (!crop.bands.head) { crop.active = 'head'; rowsSheet(); return toast('Touche aussi la ligne des numéros de jours.'); }
+    return readSchedule(cropImages());
+  }
   if (a === 'imp-save') return saveImport();
   if (a === 'save-event') {
     const t = val('fT'), d = val('fD'); if (!t || !d) return toast('Titre et date obligatoires.');
